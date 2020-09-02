@@ -1474,9 +1474,9 @@ namespace firstchain
                     {
                         // check if we can find a fork with this specific block file ... 
                         string forkpath = FindMatchingFork(currentBlockReading);
-                        if ( forkpath.Length == 0) { Console.WriteLine("Can't find a fork to process those blocks. "); }
+                        if ( forkpath.Length == 0) { Console.WriteLine("Can't find a fork to process those blocks. "); File.Delete(_filePath); return; }
                         else { _pathToGetPreviousBlock = forkpath;  }
-                        if ( isForkAlreadyExisting(GetBlockAtIndexInFile(latestTempIndex,_filePath))) { Console.WriteLine("File Already Existing"); }
+                        if ( isForkAlreadyExisting(GetBlockAtIndexInFile(latestTempIndex,_filePath))) { Console.WriteLine("File Already Existing"); File.Delete(_filePath); return; }
                     }
                 }
                 else
@@ -1933,7 +1933,7 @@ namespace firstchain
 
                 if (isNewTargetRequired(i))
                 {
-                    HashTarget = ComputeHashTargetB(prevb, GetBlockAtIndex(prevb.Index- TARGET_CLOCK));
+                    HashTarget = ComputeHashTargetB(prevb, GetBlockAtIndex(b.Index- TARGET_CLOCK));
                 }
                 else
                 {
