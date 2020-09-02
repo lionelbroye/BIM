@@ -307,13 +307,9 @@ namespace firstchain
                                 {
                                     uint.TryParse(ntimeArgs, out nTime);
                                 }
-                                for ( uint i = 0; i < nTime; i++)
-                                {
-                                    
-                                    StartMining(pkeyHASH, utxopointer, mnlock, 6);
-                                    ProccessTempBlocks(_folderPath + "winblock");
-                                    i += 5;
-                                }
+                                StartMining(pkeyHASH, utxopointer, mnlock, nTime);
+                                ProccessTempBlocks(_folderPath + "winblock");
+                               
                                
                                
                                 argumentFound = true;
@@ -1517,37 +1513,41 @@ namespace firstchain
                 {
                     // will just use gethashtarget with ComputeHashTargetB
                     Block earlierBlock;
-                    if (previousBlock.Index <= TARGET_CLOCK)
-                    {
-                        earlierBlock = GetBlockAtIndex(0); // get genesis
-                    }
-                    else
-                    {
-                        if ( latestOfficialIndex < previousBlock.Index - TARGET_CLOCK)
+                        if ( latestOfficialIndex < previousBlock.Index+1 - TARGET_CLOCK)
                         {
                             uint lastindexfile = RequestLatestBlockIndexInFile(_pathToGetPreviousBlock);
-                            if ( lastindexfile < previousBlock.Index - TARGET_CLOCK)
+                            if ( lastindexfile < previousBlock.Index+1 - TARGET_CLOCK)
                             {
-                                earlierBlock = GetBlockAtIndexInFile(previousBlock.Index - TARGET_CLOCK, _filePath);
+                                earlierBlock = GetBlockAtIndexInFile(previousBlock.Index+1 - TARGET_CLOCK, _filePath);
                             }
                             else
                             {
-                                earlierBlock = GetBlockAtIndexInFile(previousBlock.Index - TARGET_CLOCK, _pathToGetPreviousBlock);
+                                earlierBlock = GetBlockAtIndexInFile(previousBlock.Index+1 - TARGET_CLOCK, _pathToGetPreviousBlock); // it means that we have an index shit...
                             }
                             
                         }
                         else
                         {
-                            earlierBlock = GetBlockAtIndex(previousBlock.Index - TARGET_CLOCK);
+                            earlierBlock = GetBlockAtIndex(previousBlock.Index+1 - TARGET_CLOCK);
+                          
                         }
                         
-                    }
+                    
+                  
                     tempTarget = ComputeHashTargetB(previousBlock, earlierBlock);
+                    Console.WriteLine(previousBlock.Index + 1);
+                    while (true)
+                    {
+
+                    }
+
                 }
                 else
                 {
                     tempTarget = previousBlock.HashTarget;
                 }
+                
+             
                 while (true)
                 {
                     if (!IsBlockValid(currentBlockReading, previousBlock, MINTIMESTAMP, tempTarget))
@@ -1585,35 +1585,31 @@ namespace firstchain
                     timestamps.Add(previousBlock.TimeStamp);
                     MINTIMESTAMP = GetTimeStampRequirementB(timestamps);
 
-                    if (isNewTargetRequired(firstTempIndex))
+                    if (isNewTargetRequired(currentBlockReading.Index))
                     {
                         // will just use gethashtarget with ComputeHashTargetB
                         Block earlierBlock;
-                        if (previousBlock.Index <= TARGET_CLOCK)
+                        if (latestOfficialIndex < previousBlock.Index + 1 - TARGET_CLOCK)
                         {
-                            earlierBlock = GetBlockAtIndex(0); // get genesis
-                        }
-                        else
-                        {
-                            if (latestOfficialIndex < previousBlock.Index - TARGET_CLOCK)
+                            uint lastindexfile = RequestLatestBlockIndexInFile(_pathToGetPreviousBlock);
+                            if (lastindexfile < previousBlock.Index + 1 - TARGET_CLOCK)
                             {
-                                uint lastindexfile = RequestLatestBlockIndexInFile(_pathToGetPreviousBlock);
-                                if (lastindexfile < previousBlock.Index - TARGET_CLOCK)
-                                {
-                                    earlierBlock = GetBlockAtIndexInFile(previousBlock.Index - TARGET_CLOCK, _filePath);
-                                }
-                                else
-                                {
-                                    earlierBlock = GetBlockAtIndexInFile(previousBlock.Index - TARGET_CLOCK, _pathToGetPreviousBlock);
-                                }
-
+                                earlierBlock = GetBlockAtIndexInFile(previousBlock.Index + 1 - TARGET_CLOCK, _filePath);
                             }
                             else
                             {
-                                earlierBlock = GetBlockAtIndex(previousBlock.Index - TARGET_CLOCK);
+                                earlierBlock = GetBlockAtIndexInFile(previousBlock.Index + 1 - TARGET_CLOCK, _pathToGetPreviousBlock); // it means that we have an index shit...
                             }
 
                         }
+                        else
+                        {
+                            earlierBlock = GetBlockAtIndex(previousBlock.Index + 1 - TARGET_CLOCK);
+
+                        }
+
+
+
                         tempTarget = ComputeHashTargetB(previousBlock, earlierBlock);
                     }
                     else
@@ -1774,7 +1770,7 @@ namespace firstchain
 
         public static byte[] ComputeHashTargetB(Block latest, Block previous) //< compute Hash Target with specific block 
         {
-            // should check if previous index is 2016- latest index. 
+            // Get Time Spent from previous to latest. previous is always index - 1 .... 
             uint index = RequestLatestBlockIndex(true);
             uint TimeStampA = previous.TimeStamp;
             uint TimeStampB = latest.TimeStamp;
@@ -2132,15 +2128,17 @@ namespace firstchain
             MinerToken MT = new MinerToken(pKey, mUTXOP, MR);
             dataBuilder = AddBytesToList(dataBuilder, MinerTokenToBytes(MT));
             byte[] HASH_TARGET;
-            if ( isNewTargetRequired(prevBlock.Index + 1))
+            if ( isNewTargetRequired(prevBlock.Index+1)) //< will compute with the new hash target 
             {
-                uint INC = TARGET_CLOCK - 1; 
-                // can result an error if prevlock.index - INC not implemented in the official chain ... 
-                Block earlier = GetBlockAtIndex(prevBlock.Index - INC);
-                
-                if (earlier == null)
+                Block earlier;
+
+                if ( RequestLatestBlockIndex(true) >=  prevBlock.Index +1 - TARGET_CLOCK)
                 {
-                    earlier = GetBlockAtIndexInFile(prevBlock.Index - INC, _folderPath + "winblock");
+                    earlier = GetBlockAtIndex(prevBlock.Index + 1 - TARGET_CLOCK);
+                }
+                else
+                {
+                    earlier = GetBlockAtIndexInFile(prevBlock.Index + 1 - TARGET_CLOCK, _folderPath + "winblock");
                 }
                 HASH_TARGET = ComputeHashTargetB(prevBlock, earlier);
             }
