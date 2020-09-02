@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -307,8 +307,17 @@ namespace firstchain
                                 {
                                     uint.TryParse(ntimeArgs, out nTime);
                                 }
-                                StartMining(pkeyHASH, utxopointer, mnlock, nTime);
-                                ProccessTempBlocks(_folderPath + "winblock");
+                                for ( uint i = 0; i < nTime; i++)
+                                {
+                                    for(uint a = 0; a < 6; a++)
+                                    {
+                                        StartMining(pkeyHASH, utxopointer, mnlock, nTime);
+                                    }
+                                    ProccessTempBlocks(_folderPath + "winblock");
+                                    i += 5;
+                                }
+                               
+                               
                                 argumentFound = true;
                             }
 
@@ -1385,7 +1394,7 @@ namespace firstchain
                     }
                     else
                     {
-                        earlierBlock = GetBlockAtIndex(previousBlock.Index - TARGET_CLOCK);
+                        earlierBlock = GetBlockAtIndex(previousBlock.Index - TARGET_CLOCK);//  need also an update
                         
                     }
                     tempTarget = ComputeHashTargetB(previousBlock, earlierBlock);
@@ -1516,7 +1525,24 @@ namespace firstchain
                     }
                     else
                     {
-                        earlierBlock = GetBlockAtIndex(previousBlock.Index - TARGET_CLOCK);
+                        if ( latestOfficialIndex < previousBlock.Index - TARGET_CLOCK)
+                        {
+                            uint lastindexfile = RequestLatestBlockIndexInFile(_pathToGetPreviousBlock);
+                            if ( lastindexfile < previousBlock.Index - TARGET_CLOCK)
+                            {
+                                earlierBlock = GetBlockAtIndexInFile(previousBlock.Index - TARGET_CLOCK, _filePath);
+                            }
+                            else
+                            {
+                                earlierBlock = GetBlockAtIndexInFile(previousBlock.Index - TARGET_CLOCK, _pathToGetPreviousBlock);
+                            }
+                            
+                        }
+                        else
+                        {
+                            earlierBlock = GetBlockAtIndex(previousBlock.Index - TARGET_CLOCK);
+                        }
+                        
                     }
                     tempTarget = ComputeHashTargetB(previousBlock, earlierBlock);
                 }
@@ -1560,18 +1586,35 @@ namespace firstchain
                     timestamps.RemoveAt(0);
                     timestamps.Add(previousBlock.TimeStamp);
                     MINTIMESTAMP = GetTimeStampRequirementB(timestamps);
-                    
-                    if (isNewTargetRequired(currentBlockReading.Index))
+
+                    if (isNewTargetRequired(firstTempIndex))
                     {
+                        // will just use gethashtarget with ComputeHashTargetB
                         Block earlierBlock;
                         if (previousBlock.Index <= TARGET_CLOCK)
                         {
-                            earlierBlock = GetBlockAtIndex(0);
+                            earlierBlock = GetBlockAtIndex(0); // get genesis
                         }
                         else
                         {
-                           earlierBlock = GetBlockAtIndex(previousBlock.Index - TARGET_CLOCK);
-                            
+                            if (latestOfficialIndex < previousBlock.Index - TARGET_CLOCK)
+                            {
+                                uint lastindexfile = RequestLatestBlockIndexInFile(_pathToGetPreviousBlock);
+                                if (lastindexfile < previousBlock.Index - TARGET_CLOCK)
+                                {
+                                    earlierBlock = GetBlockAtIndexInFile(previousBlock.Index - TARGET_CLOCK, _filePath);
+                                }
+                                else
+                                {
+                                    earlierBlock = GetBlockAtIndexInFile(previousBlock.Index - TARGET_CLOCK, _pathToGetPreviousBlock);
+                                }
+
+                            }
+                            else
+                            {
+                                earlierBlock = GetBlockAtIndex(previousBlock.Index - TARGET_CLOCK);
+                            }
+
                         }
                         tempTarget = ComputeHashTargetB(previousBlock, earlierBlock);
                     }
@@ -2093,8 +2136,15 @@ namespace firstchain
             byte[] HASH_TARGET;
             if ( isNewTargetRequired(prevBlock.Index + 1))
             {
-                uint INC = TARGET_CLOCK - 1;
-                HASH_TARGET = ComputeHashTargetB(prevBlock, GetBlockAtIndex(prevBlock.Index - INC));
+                uint INC = TARGET_CLOCK - 1; 
+                // can result an error if prevlock.index - INC not implemented in the official chain ... 
+                Block earlier = GetBlockAtIndex(prevBlock.Index - INC);
+                
+                if (earlier == null)
+                {
+                    earlier = GetBlockAtIndexInFile(prevBlock.Index - INC, _folderPath + "winblock");
+                }
+                HASH_TARGET = ComputeHashTargetB(prevBlock, earlier);
             }
             else
             {
