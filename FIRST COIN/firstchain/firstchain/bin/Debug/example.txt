@@ -1,0 +1,11 @@
+Create Transaction Example :
+__________________________________________________________________________________________
+newtx sprkey:"location\compte A\privateKey" spukey:"location\compte A\publicKey" sutxop:4 amount:10 rpukey:"location\compte B\publicKey" rutxop:0 fee:20 lock:1599981949
+
+Getting UTXO Pointer Example :
+__________________________________________________________________________________________
+getutxop pkey:"location\compte A\publicKey"
+
+Start Mining Example :
+__________________________________________________________________________________________
+mine pkey:"location\compte A\publicKey" utxop:0 minlock:10000 ntime:80
