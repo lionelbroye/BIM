@@ -309,10 +309,8 @@ namespace firstchain
                                 }
                                 for ( uint i = 0; i < nTime; i++)
                                 {
-                                    for(uint a = 0; a < 6; a++)
-                                    {
-                                        StartMining(pkeyHASH, utxopointer, mnlock, nTime);
-                                    }
+                                    
+                                    StartMining(pkeyHASH, utxopointer, mnlock, 6);
                                     ProccessTempBlocks(_folderPath + "winblock");
                                     i += 5;
                                 }
