@@ -369,6 +369,21 @@ namespace firstchain
                     }
 
                 }
+                if (argument.Contains("reqtx"))
+                {
+                    argument = argument.Replace("reqtx", "");
+                    argument = argument.Replace("location", AppDomain.CurrentDomain.BaseDirectory);
+                    string txPath = getfilePath(argument.ToCharArray());
+                    if (File.Exists(txPath))
+                    {
+                        ProccessTempTXforPending(txPath);
+                        argumentFound = true;
+                    }
+                    else
+                    {
+                        Console.WriteLine("Path : " + txPath + " does not exist. Please set path of your public key file. ");
+                    }
+                }
                 if (!argumentFound)
                 {
                     Console.WriteLine("invalid input. type getcmdinfo for command information. ");
@@ -472,14 +487,17 @@ namespace firstchain
             
             Console.WriteLine("-----------------");
             Console.WriteLine("Get Blockchain Info      -> getbcinfo");
-            Console.WriteLine("Get Block Data at Index  -> getblockinfo [#]");
+            Console.WriteLine("Get Block Data at Index  -> getblockinfo #");
             Console.WriteLine("Create Wallet (RSA 4096) -> createwallet");
-            Console.WriteLine("Get UTXO Data at Index   -> getutxo [pointer]");
-            Console.WriteLine("Find UTXO Pointer        -> getutxop pkey:[pkeypath]");
+            Console.WriteLine("Get UTXO Data at Index   -> getutxo #");
+            Console.WriteLine("Find UTXO Pointer        -> getutxop pkey:#");
             Console.WriteLine("Verify Blokchain         -> verifychain");
             Console.WriteLine("Rebuild UTXO Set         -> buildutxos");
             Console.WriteLine("Init App                 -> initchain");
-            Console.WriteLine("Mine                     -> mine pkey:[pkeypath] utxop:[utxop] minlock:[#] ntime:[#]");
+            Console.WriteLine("Mine                     -> mine pkey:# utxop:# minlock:# ntime:#");
+            ////newtx sprkey: spukey: sutxop: amount: rpukey: rutxop: fee: lock:
+            Console.WriteLine("Create Transaction -> newtx sprkey:# spukey:# sutxop:# amount:# rpukey:# rutxop:# fee:# lock:#");
+            Console.WriteLine("Add Pending Transaction  -> reqtx #");
             Console.WriteLine("Print this               -> getcmdinfo");
             Console.WriteLine("");
         }
