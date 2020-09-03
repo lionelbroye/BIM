@@ -53,7 +53,8 @@ namespace firstchain
             public uint TokenOfUniqueness { get; }
             public uint TxFee { get; }
             public byte[] Signature { get; }
-
+           
+             
             public Tx (byte[] spk, uint amount, byte[] rpk, uint locktime, uint spkP, uint rpkP, uint TOU, uint Fee, byte[] sign )
             {
                 this.sPKey = spk;
@@ -777,6 +778,7 @@ namespace firstchain
         {
             if ( bytes.Length != 1100) { return null;  }
 
+            
             uint byteOffset = 0;
             byte[] sPkey = new byte[532];
             byte[] Amount = new byte[4];
@@ -928,7 +930,7 @@ namespace firstchain
                 byte[] txBytes = new byte[1100];
                 for (uint n = byteOffset; n < byteOffset+1100; i++)
                 {
-                    txBytes[i - byteOffset] = bytes[i];
+                    txBytes[n - byteOffset] = bytes[n]; //  out of range exception 
                 }
                 byteOffset += 1100;
                 dt.Add(BytesToTx(txBytes));
@@ -2030,12 +2032,12 @@ namespace firstchain
             bool dustNeeded= false;
             if (!VerifyTransactionDataSignature(TxToBytes(TX))) { Console.WriteLine("Invalid Signature"); return false; }
             UTXO sUTXO = GetOfficialUTXOAtPointer(TX.sUTXOP);
-            if (sUTXO == null) { Console.WriteLine("Invalid UTXO POINTER"); return false; }
+            if (sUTXO == null) { Console.WriteLine("Invalid UTXO POINTER : utxo not found " + TX.sUTXOP ); return false; }
             if (!ComputeSHA256(TX.sPKey).SequenceEqual(sUTXO.HashKey)) { Console.WriteLine("Invalid UTXO POINTER"); return false; }
             if ( TX.rUTXOP >= 4 ) {
                 UTXO rUTXO = GetOfficialUTXOAtPointer(TX.rUTXOP);
-                if (rUTXO == null) { Console.WriteLine("Invalid UTXO POINTER"); return false; }
-                if (!TX.rHashKey.SequenceEqual(rUTXO.HashKey)) { Console.WriteLine("Invalid UTXO POINTER"); return false; }
+                if (rUTXO == null) { Console.WriteLine("Invalid UTXO POINTER : "+ TX.rUTXOP); return false; }
+                if (!TX.rHashKey.SequenceEqual(rUTXO.HashKey)) { Console.WriteLine("Invalid UTXO POINTER" + +TX.rUTXOP); return false; }
             }
             else { dustNeeded = true;  }
             if (TX.TokenOfUniqueness != sUTXO.TokenOfUniqueness+1) { Console.WriteLine("Invalid Token"); return false; }
@@ -2425,21 +2427,24 @@ namespace firstchain
             {
                 _MyPrRsa.ImportCspBlob(File.ReadAllBytes(_MyPrivateKey));
                 List<byte> DataBuilder = new List<byte>();
+                /*
+                public Tx (byte[] spk, uint amount, byte[] rpk, uint locktime, uint spkP, uint rpkP, uint TOU, uint Fee, byte[] sign )
+             */
                 DataBuilder = AddBytesToList(DataBuilder, _MyPublicKey); 
-                DataBuilder = AddBytesToList(DataBuilder, Coinamount); 
+                DataBuilder = AddBytesToList(DataBuilder, Coinamount);
+                DataBuilder = AddBytesToList(DataBuilder, _hashOthPublicKey);
                 DataBuilder = AddBytesToList(DataBuilder, LockTime); 
                 DataBuilder = AddBytesToList(DataBuilder, sUTXOPointer); 
                 DataBuilder = AddBytesToList(DataBuilder, rUTXOPointer);
                 DataBuilder = AddBytesToList(DataBuilder, TOU); 
                 DataBuilder = AddBytesToList(DataBuilder, FEES); 
-                DataBuilder = AddBytesToList(DataBuilder, _hashOthPublicKey); 
+                
+                // + sign
 
                 byte[] UnsignedData = ListToByteArray(DataBuilder);
-                UnsignedData = ComputeSHA256(UnsignedData);
-                byte[] Signature = _MyPrRsa.SignHash(UnsignedData, CryptoConfig.MapNameToOID("SHA256")); 
-                Console.WriteLine(Signature.Length);
-                byte[] HashSignature = ComputeSHA256(Signature);
-                DataBuilder = AddBytesToList(DataBuilder, Signature);
+                UnsignedData = ComputeSHA256(UnsignedData); //< 1 : hash data
+                byte[] Signature = _MyPrRsa.SignHash(UnsignedData, CryptoConfig.MapNameToOID("SHA256")); //< 2 : produce signature
+                DataBuilder = AddBytesToList(DataBuilder, Signature); //< add the signature to the bytearray...
                 byte[] SignedData = ListToByteArray(DataBuilder);
 
                 if ( !VerifyTransactionDataSignature(SignedData))
