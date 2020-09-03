@@ -2357,7 +2357,9 @@ namespace firstchain
             File.WriteAllBytes(_folderPath + "publicKey", rsa.ExportCspBlob(false));
             rsa.Clear();
             Console.WriteLine("RSA public and private keys successfully created and saved in app folder! ");
-           // Console.WriteLine("Please (4 security) use QRMYKEYS, print output and delete key files ");
+            Process.Start(_folderPath + "QRMYKEYS.exe");
+            Console.WriteLine("QR Code of your assymetric keys will be generated... ");
+            // Console.WriteLine("Please (4 security) use QRMYKEYS, print output and delete key files ");
 
         }
 
