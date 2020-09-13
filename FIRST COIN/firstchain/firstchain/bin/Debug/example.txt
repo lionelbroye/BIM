@@ -1,48 +1,69 @@
 instructions pour tester le programme :
 __________________________________________________________________________________________
 __________________________________________________________________________________________
-ETAPE A : crÈer des wallet
+ETAPE A : cr√©er des wallet
 __________________________________________________________________________________________
-[1] crÈer un portefeuille numÈrique en tapant createwallet
-[2] crÈer un dossier "compte A" ‡ la racine du programme
-[3] dÈplacer les fichiers privatekey et publickey dans ce dossier
-[4] faire la meme chose, mais cette fois, placez les clÈs dans un dossier ‡ la racine appelÈ "compte B"
+[1] cr√©er un portefeuille num√©rique en tapant createwallet
+[2] cr√©er un dossier "compte A" √† la racine du programme
+[3] d√©placer les fichiers privatekey et publickey dans ce dossier
+[4] faire la meme chose, mais cette fois, placez les cl√©s dans un dossier √† la racine appel√© "compte B"
 
 __________________________________________________________________________________________
 ETAPE B : Miner mes premiers blocs pour gagner mes premiers coins
 __________________________________________________________________________________________
-En l'Ètat, vous n'Ítes toujours pas inscrit dans la chaine de blocs. Pour etre inscrit, vous devez soit minÈ des blocs jusqu'‡
-ce que ceux-ci soit ajoutÈ ‡ la chaine officiel OU faire une transaction avec quelquun qui vous donne des coins.
+En l'√©tat, vous n'√™tes toujours pas inscrit dans la chaine de blocs. Pour etre inscrit, vous devez soit min√© des blocs jusqu'√†
+ce que ceux-ci soit ajout√© √† la chaine officiel OU faire une transaction avec quelquun qui vous donne des coins.
 Nous allons nous enregistrer dans la chaine de bloc en minant. Nous n'avons pas encore de pointeur UTXO donc nous allons miner
-en fantÙme :
+en fant√¥me :
 [1] miner les 80 premiers blocs avec le compte A, taper :
 mine pkey:"location\compte A\publicKey" utxop:0 minlock:10000 ntime:80
-[2] Vous devez maintenant avoir un pointeur UTXO. Pour le connaÓtre, taper :
+
+plus en d√©tail ->
+pkey:# : { doit passer le chemin d'acces de la cl√© publique que vous souhaitez utiliser pour miner! }
+utxop:#  { doit passer un pointeur utxo de votre cl√© publique inscrit dans le set d'utxo. 0 si vous n'en avez pas encore ! }
+minlock:# { doit passer une valeure en seconde d√©finissant quel locktime maximum ont les transactions que vos blocs auront pendant le minage :
+            par exemple en mettant 10000, les transactions pourissant dans 10000 secondes ne seront pas int√©gr√©s ! }
+ntime:#  { doit passer une valeure definissant le nombre de blocs min√© souhait√© avant la fin du processus de minage! si 0, c'est √† l'infini! }
+
+[2] Vous devez maintenant avoir un pointeur UTXO. Pour le conna√Ætre, taper :
 getutxop pkey:"location\compte A\publicKey"
-Votre utxo pointeur est 4. Gardez le en mÈmoire! Votre solde est de 50. Mais vos autres pointeur sont aussi 44, 84, 124... 
-puisque vous en avez minÈ ‡ blanc 80 blocs...
+Votre utxo pointeur est 4. Gardez le en m√©moire! Votre solde est de 50. Mais vos autres pointeur sont aussi 44, 84, 124... 
+puisque vous en avez min√© √† blanc 80 blocs...
 [2] Miner a nouveau cette fois ci en utilisant votre pointeur.
 mine pkey:"location\compte A\publicKey" utxop:4 minlock:10000 ntime:10
-[3] Cette fois, vous avez minÈ en utilisant votre wallet ! Votre solde a ÈtÈ mis ‡ jour! Pour le vÈrifier, tapez : 
+[3] Cette fois, vous avez min√© en utilisant votre wallet ! Votre solde a √©t√© mis √† jour! Pour le v√©rifier, tapez : 
 getutxo 4
-Puisque vous avez minÈ 10 nouveau bloc, vous avez gagnez 50 coin par bloc, soit 500 coin. Vous avez maintenant un solde de 550 !
+Puisque vous avez min√© 10 nouveau bloc, vous avez gagnez 50 coin par bloc, soit 500 coin. Vous avez maintenant un solde de 550 !
 
 __________________________________________________________________________________________
-ETAPE C : CrÈer une transaction et l'ajouter ‡ la chaine de bloc
+ETAPE C : Cr√©er une transaction et l'ajouter √† la chaine de bloc
 __________________________________________________________________________________________
 
-[1] vous allez donnez avec le compte A 10 coin au compte B ! Pour cela vous devez d'abord crÈer une transaction. Taper : 
+[1] vous allez donnez avec le compte A 10 coin au compte B ! Pour cela vous devez d'abord cr√©er une transaction. Taper : 
 newtx sprkey:"location\compte A\privateKey" spukey:"location\compte A\publicKey" sutxop:4 amount:10 rpukey:"location\compte B\publicKey" rutxop:0 fee:20 lock:1699981949
-[2] IntÈgrer cette transaction ‡ vos transaction en attente afin de l'intÈgrer aux prochains blocs que vous allez miner. Taper : 
+
+plus en d√©tail ->
+sprkey:# : { doit passer le chemin d'acces de la cl√© priv√© que vous souhaitez utiliser ! }
+spukey:#   { doit passer le chemin d'acces de la cl√© publique que vous souhaitez utiliser ! }
+sutxop:#   { doit passer le pointeur de votre cl√© publique dans le set d'utxo!  }
+amount:#   { doit passer le nombre de coin que vous donnez au receveur! }
+rpukey:#   { doit passer le chemin d'acces de la cl√© publique du receveur!  }
+rutxop:#   { doit passer le pointeur de la cl√© publique du receveur dans le set d'utxo! Peut √™tre 0. }
+fee:#      { doit passer les frais de transactions qui seront appliqu√©s. Ils doivent recquiert le minimum frais de transaction de la blockchain actuel! Les extras, 
+            c'est pour le mineur ! }
+lock:#     { doit passer le temps en seconde (empreinte temporelle UNIX!) avant laquel vous d√©sirez que cette transaction soit inscrite dans la blockchain officielle !
+             votre transaction ne sera plus valable √† partir du moment o√π ce temps sera pass√©! Pr√©voyez un d√©lai plus ou moins long en fonction de l'activit√© du r√©seau !  }
+
+[2] Int√©grer cette transaction √† vos transaction en attente afin de l'int√©grer aux prochains blocs que vous allez miner. Taper : 
 reqtx "location\TX11"
 [3] Maintenant miner 10 autres blocs avec votre compte A ! 
 mine pkey:"location\compte A\publicKey" utxop:4 minlock:10000 ntime:10
-[4] Pour vÈrifier que vous avez bien intÈgrer Compte B ‡ la chaine de blocs et que vous lui avez donner 10 coin taper : 
+[4] Pour v√©rifier que vous avez bien int√©grer Compte B √† la chaine de blocs et que vous lui avez donner 10 coin taper : 
 getblockinfo 91
 Vous devriez voir votre transaction inscrite dans ce bloc! 
 [5] Vous pouvez maintenant utiliser ce compte B pour miner et effectuer des transaction ! Taper : 
 getutxop pkey:"location\compte B\publicKey"
-Vous obtenez pour le compte B un pointeur Ègal a 3204 et un solde de 10 coin! 
+Vous obtenez pour le compte B un pointeur √©gal a 3204 et un solde de 10 coin! 
 La prochaine fois, si vous voulez augmentez le solde de coin du compte B miner avec celui-ci : 
 mine pkey:"location\compte B\publicKey" utxop:3204 minlock:10000 ntime:10 
 
