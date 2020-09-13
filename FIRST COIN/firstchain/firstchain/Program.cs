@@ -14,7 +14,7 @@ namespace firstchain
 {
     /*
     
-    CODE BY GGGRAPH
+    CODE BY GGGRAPH for esad orleans
     
     */
     class Program
