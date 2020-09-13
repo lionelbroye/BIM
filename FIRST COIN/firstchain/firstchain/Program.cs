@@ -1474,20 +1474,19 @@ namespace firstchain
                     }
                 }
                 uint MINTIMESTAMP = GetTimeStampRequirementB(timestamps);
-                // we check if new target required else 
-                //uint MINTIMESTAMP = 0;
+             
                 byte[] tempTarget = new byte[32];
                 if ( isNewTargetRequired(firstTempIndex))
                 {
                     // will just use gethashtarget with ComputeHashTargetB
                     Block earlierBlock;
-                    if ( previousBlock.Index <= TARGET_CLOCK) {
+                    if ( previousBlock.Index + 1 <= TARGET_CLOCK) {
                         earlierBlock = GetBlockAtIndex(0); // get genesis
                         if (earlierBlock == null) { Console.WriteLine("[missing block]"); File.Delete(_filePath); return; }
                     }
                     else
                     {
-                        earlierBlock = GetBlockAtIndex(previousBlock.Index - TARGET_CLOCK);//  need also an update
+                        earlierBlock = GetBlockAtIndex(previousBlock.Index + 1 - TARGET_CLOCK);//  need also an update
                         if (earlierBlock == null) { Console.WriteLine("[missing block]"); File.Delete(_filePath); return; }
 
                     }
@@ -1533,21 +1532,21 @@ namespace firstchain
                     if (isNewTargetRequired(currentBlockReading.Index))
                     {
                         Block earlierBlock;
-                        if (previousBlock.Index <= TARGET_CLOCK)
+                        if (previousBlock.Index + 1 <= TARGET_CLOCK)
                         {
                             earlierBlock = GetBlockAtIndex(0);
                             if (earlierBlock == null) { Console.WriteLine("[missing block]"); File.Delete(_filePath); return; }
                         }
                         else
                         { 
-                            if (previousBlock.Index - TARGET_CLOCK > latestOfficialIndex)
+                            if (previousBlock.Index + 1 - TARGET_CLOCK > latestOfficialIndex)
                             {
-                                earlierBlock = GetBlockAtIndexInFile(previousBlock.Index - TARGET_CLOCK, _filePath);
+                                earlierBlock = GetBlockAtIndexInFile(previousBlock.Index + 1 - TARGET_CLOCK, _filePath);
                                 if (earlierBlock == null) { Console.WriteLine("[missing block]"); File.Delete(_filePath); return; }
                             }
                             else
                             {
-                                earlierBlock = GetBlockAtIndex(previousBlock.Index - TARGET_CLOCK);
+                                earlierBlock = GetBlockAtIndex(previousBlock.Index + 1  - TARGET_CLOCK);
                                 if (earlierBlock == null) { Console.WriteLine("[missing block]"); File.Delete(_filePath); return; }
                             }
                         }
