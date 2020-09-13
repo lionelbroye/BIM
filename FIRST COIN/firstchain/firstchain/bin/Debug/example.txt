@@ -50,7 +50,8 @@ amount:#   { doit passer le nombre de coin que vous donnez au receveur! }
 rpukey:#   { doit passer le chemin d'acces de la clé publique du receveur!  }
 rutxop:#   { doit passer le pointeur de la clé publique du receveur dans le set d'utxo! Peut être 0. }
 fee:#      { doit passer les frais de transactions qui seront appliqués. Ils doivent recquiert le minimum frais de transaction de la blockchain actuel! Les extras, 
-            c'est pour le mineur ! }
+            c'est pour inciter les mineurs a prendre votre transaction pour le bloc qu'ils vont miner, puisqu'ils récuperent en coin tous les frais transactions dans le
+            bloc qu'ils minent ! }
 lock:#     { doit passer le temps en seconde (empreinte temporelle UNIX!) avant laquel vous désirez que cette transaction soit inscrite dans la blockchain officielle !
              votre transaction ne sera plus valable à partir du moment où ce temps sera passé! Prévoyez un délai plus ou moins long en fonction de l'activité du réseau !  }
 
