@@ -1296,7 +1296,17 @@ namespace firstchain
             return true;
         }
 
-
+        public static void UpdatePendingTXFileB(string _filePath)
+        {
+            uint firstTempIndex = BitConverter.ToUInt32(GetBytesFromFile(4, 8, _filePath), 0);
+            uint latestTempIndex = BitConverter.ToUInt32(GetBytesFromFile(0, 4, _filePath), 0);
+            for (uint i = firstTempIndex; i < latestTempIndex+1; i++)
+            {
+                Block b = GetBlockAtIndexInFile(i,_filePath);
+                if ( b == null) { return; } 
+                UpdatePendingTXFile(b);
+            }
+        }
         //------------------------ CONSENSUS ---------------------
         public static void UpdatePendingTXFile(Block b) // delete all TX in pending if they are include in the block ( just with verifying pkey & tou)
         {
@@ -1355,13 +1365,15 @@ namespace firstchain
             if (!onlyForks)
             {
                 uint byteOffset = 0;
-                FileInfo f = new FileInfo(_folderPath + "ptx");
+                FileInfo f = new FileInfo(_folderPath + "ptx"); // clean out to date ptx and also if there are include
                 int fl = (int)f.Length;
                 while (byteOffset < fl)
                 {
                     Tx TX = BytesToTx(GetBytesFromFile(byteOffset, 1100, _folderPath + "ptx"));
                     if ( TX == null) { FatalErrorHandler(0); return; } // FATAL ERROR
-                    if ( TX.LockTime < unixTimestamp)
+                    bool _del = false;
+                    if (TX.LockTime < unixTimestamp) { _del = true; }
+                    if ( _del)
                     {
                         // flip bytes then truncate
                         byte[] lastTX = GetBytesFromFile((uint)fl-1100, 1100, _folderPath + "ptx"); // FATAL ERROR
@@ -1371,6 +1383,7 @@ namespace firstchain
                         fl = (int)f.Length;
 
                     }
+                    
                     byteOffset += 1100;
                     
                 }
@@ -1385,6 +1398,8 @@ namespace firstchain
             // can be very large ... so we have have to chunk every txs ... into split part of max 500 tx 4 the RAM alloc
             uint chunkcounter = 0;
             uint byteOffset = 0;
+
+            // we only accept pending tx that avec 
          
             List<Tx> txs = new List<Tx>(); 
             while ( byteOffset < fl)
@@ -1399,7 +1414,7 @@ namespace firstchain
                     chunkcounter = 0;
                     foreach (Tx TX in txs)
                     {
-                        if (isTxValidforPending(TX)) {
+                        if (isTxValidforPending(TX, GetOfficialUTXOAtPointer(TX.sUTXOP))) {
                             AppendBytesToFile(_folderPath + "ptx", TxToBytes(TX));
                         }
                         
@@ -1415,7 +1430,6 @@ namespace firstchain
         
         public static void ProccessTempBlocks(string _filePath) // MAIN FUNCTION TO VALID BLOCK
         {
-            CleanOldPendingTX(true);
             FileInfo f = new FileInfo(_filePath);
             if (f.Length < 8) { File.Delete(_filePath); return; }
             if (!isHeaderCorrectInBlockFile(_filePath)) { File.Delete(_filePath); return; }
@@ -1482,13 +1496,18 @@ namespace firstchain
                 {
                     tempTarget = previousBlock.HashTarget;
                 }
-
+                List<UTXO> vUTXO = new List<UTXO>(); //< we will need temp file to avoid stackoverflow ( dont load this in RAM! )
                 while (true)
                 {
-                    if (!IsBlockValid(currentBlockReading, previousBlock, MINTIMESTAMP, tempTarget))
+                    Tuple<bool, List<UTXO>> bV = IsBlockValid(currentBlockReading, previousBlock, MINTIMESTAMP, tempTarget, vUTXO);
+
+                    if (!bV.Item1)
                     {
                         File.Delete(_filePath);
+                        return;
                     }
+                    vUTXO = bV.Item2;
+                    
                     if (currentBlockReading.Index == latestTempIndex)
                     {
                         DownGradeUTXOSet(firstTempIndex-1);
@@ -1633,25 +1652,57 @@ namespace firstchain
                   
                     tempTarget = ComputeHashTargetB(previousBlock, earlierBlock);
                     Console.WriteLine(previousBlock.Index + 1);
-                    while (true)
-                    {
-
-                    }
+                    
 
                 }
                 else
                 {
                     tempTarget = previousBlock.HashTarget;
                 }
-                
+                List<UTXO> vUTXO = new List<UTXO>();  
+                // we should update this vUTXO with every block of a fork if fork is needed... also
+                if (_pathToGetPreviousBlock != GetLatestBlockChainFilePath())
+                {
+                    uint firstforkIndex = BitConverter.ToUInt32(GetBytesFromFile(4, 8, _pathToGetPreviousBlock), 0);
+                    for (uint i = firstforkIndex; i < previousBlock.Index + 1; i++)
+                    {
+                        Block b = GetBlockAtIndexInFile(i, _pathToGetPreviousBlock);
+                        if ( b == null) { File.Delete(_filePath); return;  }
+                        
+                        foreach(Tx TXS in b.Data)
+                        {
+                            bool _found = false;
+                            int fIndex = 0;
+                            for (int a = 0; a < vUTXO.Count; a++)
+                            {
+                                if (vUTXO[a].HashKey.SequenceEqual(ComputeSHA256(TXS.sPKey)))
+                                {
+                                    _found = true;
+                                    fIndex = a;
+                                }
+                            }
+                            if (!_found)
+                            {
+                                vUTXO.Add(UpdateVirtualUTXOWithFullBlock(b, GetOfficialUTXOAtPointer(TXS.sUTXOP), false));
+                            }
+                            else
+                            {
+                                vUTXO[fIndex] = UpdateVirtualUTXOWithFullBlock(b, vUTXO[fIndex], false);
+                            }
+                        }
+                    }
+                }
              
                 while (true)
                 {
-                    if (!IsBlockValid(currentBlockReading, previousBlock, MINTIMESTAMP, tempTarget))
+                    Tuple<bool, List<UTXO>> bV = IsBlockValid(currentBlockReading, previousBlock, MINTIMESTAMP, tempTarget, vUTXO);
+
+                    if (!bV.Item1)
                     {
                         File.Delete(_filePath);
                         return;
                     }
+                    vUTXO = bV.Item2; // vutxo are update! 
                     if (currentBlockReading.Index == latestTempIndex)
                     {
                         
@@ -1660,8 +1711,9 @@ namespace firstchain
                             string newPath = GetNewForkFilePath();
                             File.Move(_filePath, newPath);
                             Console.WriteLine("new fork added");
+                            UpdatePendingTXFileB(newPath);
                             VerifyRunState();
-                            
+
                             return;
                         }
                         else
@@ -1952,6 +2004,7 @@ namespace firstchain
                 if (b == null) { File.Delete(_path2); FatalErrorHandler(0); return; } // FATAL ERROR
                 byte[] bytes = BlockToBytes(b);
                 AppendBytesToFile(newForkPath, bytes);
+                UpdatePendingTXFile(b);
             }
             OverWriteBytesInFile(0, newForkPath, BitConverter.GetBytes(LastIndex)); 
             File.Delete(_path2);
@@ -2031,7 +2084,7 @@ namespace firstchain
                 UpgradeUTXOSet(b);
             }
         }
-        public static bool isBlockChainValid()
+        public static bool isBlockChainValid() //< WE NEED TO FIND A WAY TO REBUILD UTXO SET... 
         {
             uint lastIndex = RequestLatestBlockIndex(true);
             Block gen = GetBlockAtIndex(0);
@@ -2053,32 +2106,65 @@ namespace firstchain
                 {
                     HashTarget = prevb.HashTarget;
                 }
-                 if (!IsBlockValid(b, prevb, 0, HashTarget)){
-                    return false;
-                }
+                // if (!IsBlockValid(b, prevb, 0, HashTarget)){ 
+                  //  return false;
+               // }
             }
             return true;
         }
-        public static bool IsBlockValid(Block b, Block prevb, uint MIN_TIME_STAMP, byte[] HASHTARGET)
+        public static Tuple<bool,List<UTXO>> IsBlockValid(Block b, Block prevb, uint MIN_TIME_STAMP, byte[] HASHTARGET, List<UTXO> vUTXO) 
         {
 
-            if (!b.previousHash.SequenceEqual(prevb.Hash)) { Console.WriteLine("wrong previous hash"); return false;  }
+            if (!b.previousHash.SequenceEqual(prevb.Hash)) { Console.WriteLine("wrong previous hash"); return new Tuple<bool, List<UTXO>>(false, vUTXO);  }
             uint unixTimestamp = (uint)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
-            if (b.TimeStamp < MIN_TIME_STAMP || b.TimeStamp > unixTimestamp) { Console.WriteLine("wrong time stamp"); return false; }
-            if ( !b.HashTarget.SequenceEqual(HASHTARGET)) { Console.WriteLine("wrong HASH TARGET"); return false; }
+            if (b.TimeStamp < MIN_TIME_STAMP || b.TimeStamp > unixTimestamp) { Console.WriteLine("wrong time stamp"); return new Tuple<bool, List<UTXO>>(false, vUTXO); }
+            if ( !b.HashTarget.SequenceEqual(HASHTARGET)) { Console.WriteLine("wrong HASH TARGET"); return new Tuple<bool, List<UTXO>>(false, vUTXO); }
             uint sumFEE = 0;
+            //------------------------------------ > WORKING VIRTUALIZING UTXO
             foreach ( Tx TX in b.Data)
             {
-                if (!isTxValidforPending(TX)) { Console.WriteLine("wrong TX"); return false; }
+                // [1] we first need to check if all vUTXO contains TX.sutxop
+                // if true --------> UTXO = UTXO of the vUTXO
+                // if else --------> UTXO = getofficialutxoatpointer(tx.sutxop)
+                bool _found = false;
+                int indexF = 0; 
+                UTXO utxo = null;
+                for (int i = 0; i < vUTXO.Count; i++)
+                {
+                    if (vUTXO[i].HashKey.SequenceEqual(ComputeSHA256(TX.sPKey)))
+                    {
+                        utxo = vUTXO[i];
+                        indexF = i;
+                        _found = true;
+                        break;
+                    }
+                }
+                if(!_found)
+                {
+                    utxo = GetOfficialUTXOAtPointer(TX.sUTXOP); 
+                }
+                if (!isTxValidforPending(TX,utxo)) { Console.WriteLine("wrong TX"); return new Tuple<bool, List<UTXO>>(false, vUTXO); }
+                
                 sumFEE += TX.TxFee;
+                // [2] then we need to update the virtual utxo list with a getvirtualutxo
+                UTXO nUTXO = UpdateVirtualUTXO(TX, utxo, false);
+                if (_found)
+                {
+                    vUTXO[indexF] = nUTXO;
+                }
+                else
+                {
+                    vUTXO.Add(nUTXO);
+                }
             }
+            //------------------------------------ > <
             if ( b.minerToken.mUTXOP != 0)
             {
                 UTXO mUTXO = GetOfficialUTXOAtPointer(b.minerToken.mUTXOP);
-                if ( mUTXO == null) { Console.WriteLine("wrong UTXO pointer"); return false; }
-                else { if (!mUTXO.HashKey.SequenceEqual(b.minerToken.MinerPKEY)) { Console.WriteLine("wrong UTXO pointer"); return false; } }
+                if ( mUTXO == null) { Console.WriteLine("wrong UTXO pointer"); return new Tuple<bool, List<UTXO>>(false, vUTXO); }
+                else { if (!mUTXO.HashKey.SequenceEqual(b.minerToken.MinerPKEY)) { Console.WriteLine("wrong UTXO pointer"); return new Tuple<bool, List<UTXO>>(false, vUTXO); } }
             }
-            if ( b.minerToken.MiningReward != GetMiningReward(b.Index) + sumFEE) { Console.WriteLine("wrong mining reward"); return false;  }
+            if ( b.minerToken.MiningReward != GetMiningReward(b.Index) + sumFEE) { Console.WriteLine("wrong mining reward"); return new Tuple<bool, List<UTXO>>(false, vUTXO); }
             // now verify Merkle Root Correctness. 
             List<byte> dataBuilder = new List<byte>();
             dataBuilder = AddBytesToList(dataBuilder, BitConverter.GetBytes(b.Index));
@@ -2090,15 +2176,15 @@ namespace firstchain
             dataBuilder = AddBytesToList(dataBuilder, b.HashTarget);
             byte[] sha = ComputeSHA256(ListToByteArray(dataBuilder));
             sha = ComputeSHA256(sha); //< double hash function to avoid collision or anniversary attack 
-            if (!sha.SequenceEqual(b.Hash)) { Console.WriteLine("wrong merkle root"); return false; }
+            if (!sha.SequenceEqual(b.Hash)) { Console.WriteLine("wrong merkle root"); return new Tuple<bool, List<UTXO>>(false, vUTXO); }
             // now checking nonce
             dataBuilder = new List<byte>();
             dataBuilder = AddBytesToList(dataBuilder, BitConverter.GetBytes(b.Nonce));
             dataBuilder = AddBytesToList(dataBuilder, b.Hash);
             byte[] hash = ComputeSHA256(ListToByteArray(dataBuilder));
-            if (!isNonceGolden(hash, b.HashTarget)) { Console.WriteLine("wrong nonce"); return false; }
+            if (!isNonceGolden(hash, b.HashTarget)) { Console.WriteLine("wrong nonce"); return new Tuple<bool, List<UTXO>>(false, vUTXO); }
 
-            return true;
+            return new Tuple<bool, List<UTXO>>(true, vUTXO);
         }
         public static uint GetMiningReward(uint index) //< Get Current Mining Reward from Index. 
         {
@@ -2121,11 +2207,10 @@ namespace firstchain
             }
             return sum;
         }
-        public static bool isTxValidforPending(Tx TX) //< this only verify tx validity with current official utxo set. 
+        public static bool isTxValidforPending(Tx TX, UTXO sUTXO) //< this only verify tx validity with current official utxo set. ( need to verify validity for 
         {
             bool dustNeeded= false;
             if (!VerifyTransactionDataSignature(TxToBytes(TX))) { Console.WriteLine("Invalid Signature"); return false; }
-            UTXO sUTXO = GetOfficialUTXOAtPointer(TX.sUTXOP);
             if (sUTXO == null) { Console.WriteLine("Invalid UTXO POINTER : utxo not found " + TX.sUTXOP ); return false; }
             if (!ComputeSHA256(TX.sPKey).SequenceEqual(sUTXO.HashKey)) { Console.WriteLine("Invalid UTXO POINTER"); return false; }
             if ( TX.rUTXOP >= 4 ) {
@@ -2294,6 +2379,7 @@ namespace firstchain
                         AppendBytesToFile(_folderPath + "winblock", BlockToBytes(WinnerBlock));
                     }
 
+                    UpdatePendingTXFile(WinnerBlock);
                     return;
 
                 }
