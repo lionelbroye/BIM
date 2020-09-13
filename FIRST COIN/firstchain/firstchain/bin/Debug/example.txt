@@ -1,11 +1,49 @@
-Create Transaction Example :
+instructions pour tester le programme :
 __________________________________________________________________________________________
-newtx sprkey:"location\compte A\privateKey" spukey:"location\compte A\publicKey" sutxop:4 amount:10 rpukey:"location\compte B\publicKey" rutxop:0 fee:20 lock:1599981949
+__________________________________________________________________________________________
+ETAPE A : créer des wallet
+__________________________________________________________________________________________
+[1] créer un portefeuille numérique en tapant createwallet
+[2] créer un dossier "compte A" à la racine du programme
+[3] déplacer les fichiers privatekey et publickey dans ce dossier
+[4] faire la meme chose, mais cette fois, placez les clés dans un dossier à la racine appelé "compte B"
 
-Getting UTXO Pointer Example :
 __________________________________________________________________________________________
-getutxop pkey:"location\compte A\publicKey"
-
-Start Mining Example :
+ETAPE B : Miner mes premiers blocs pour gagner mes premiers coins
 __________________________________________________________________________________________
+En l'état, vous n'êtes toujours pas inscrit dans la chaine de blocs. Pour etre inscrit, vous devez soit miné des blocs jusqu'à
+ce que ceux-ci soit ajouté à la chaine officiel OU faire une transaction avec quelquun qui vous donne des coins.
+Nous allons nous enregistrer dans la chaine de bloc en minant. Nous n'avons pas encore de pointeur UTXO donc nous allons miner
+en fantôme :
+[1] miner les 80 premiers blocs avec le compte A, taper :
 mine pkey:"location\compte A\publicKey" utxop:0 minlock:10000 ntime:80
+[2] Vous devez maintenant avoir un pointeur UTXO. Pour le connaître, taper :
+getutxop pkey:"location\compte A\publicKey"
+Votre utxo pointeur est 4. Gardez le en mémoire! Votre solde est de 50. Mais vos autres pointeur sont aussi 44, 84, 124... 
+puisque vous en avez miné à blanc 80 blocs...
+[2] Miner a nouveau cette fois ci en utilisant votre pointeur.
+mine pkey:"location\compte A\publicKey" utxop:4 minlock:10000 ntime:10
+[3] Cette fois, vous avez miné en utilisant votre wallet ! Votre solde a été mis à jour! Pour le vérifier, tapez : 
+getutxo 4
+Puisque vous avez miné 10 nouveau bloc, vous avez gagnez 50 coin par bloc, soit 500 coin. Vous avez maintenant un solde de 550 !
+
+__________________________________________________________________________________________
+ETAPE C : Créer une transaction et l'ajouter à la chaine de bloc
+__________________________________________________________________________________________
+
+[1] vous allez donnez avec le compte A 10 coin au compte B ! Pour cela vous devez d'abord créer une transaction. Taper : 
+newtx sprkey:"location\compte A\privateKey" spukey:"location\compte A\publicKey" sutxop:4 amount:10 rpukey:"location\compte B\publicKey" rutxop:0 fee:20 lock:1699981949
+[2] Intégrer cette transaction à vos transaction en attente afin de l'intégrer aux prochains blocs que vous allez miner. Taper : 
+reqtx "location\TX11"
+[3] Maintenant miner 10 autres blocs avec votre compte A ! 
+mine pkey:"location\compte A\publicKey" utxop:4 minlock:10000 ntime:10
+[4] Pour vérifier que vous avez bien intégrer Compte B à la chaine de blocs et que vous lui avez donner 10 coin taper : 
+getblockinfo 91
+Vous devriez voir votre transaction inscrite dans ce bloc! 
+[5] Vous pouvez maintenant utiliser ce compte B pour miner et effectuer des transaction ! Taper : 
+getutxop pkey:"location\compte B\publicKey"
+Vous obtenez pour le compte B un pointeur égal a 3204 et un solde de 10 coin! 
+La prochaine fois, si vous voulez augmentez le solde de coin du compte B miner avec celui-ci : 
+mine pkey:"location\compte B\publicKey" utxop:3204 minlock:10000 ntime:10 
+
+
