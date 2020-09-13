@@ -200,6 +200,7 @@ namespace firstchain
                         if (File.Exists(path))
                         {
                             byte[] pkeyHASH = ComputeSHA256(File.ReadAllBytes(path));
+                            Console.WriteLine("result for hash key : " + SHAToHex(pkeyHASH, false));
                             uint myUTXOP = GetUTXOPointer(pkeyHASH);
                             UTXO myUTXO = GetOfficialUTXOAtPointer(myUTXOP);
                             if ( myUTXO != null)
@@ -511,9 +512,22 @@ namespace firstchain
             Console.WriteLine("merkle root   : " + SHAToHex(b.Hash, false));
             Console.WriteLine("previous hash : " + SHAToHex(b.previousHash, false));
             Console.WriteLine("#TX           : " + b.DataSize);
+            foreach ( Tx TXS in b.Data)
+            {
+                PrintTXData(TXS);
+            }
             Console.WriteLine("hash target   : " + SHAToHex(b.HashTarget, false));
             Console.WriteLine("nonce         : " + b.Nonce);
             Console.WriteLine("");
+        }
+        public static void PrintTXData(Tx TX)
+        {
+            Console.WriteLine("-----------------");
+            Console.WriteLine("sender           : " + SHAToHex(ComputeSHA256(TX.sPKey), false));
+            Console.WriteLine("receiver         : " + SHAToHex(TX.rHashKey, false));
+            Console.WriteLine("amount           : " + TX.Amount );
+            Console.WriteLine("fee              : " + TX.TxFee);
+            Console.WriteLine("-----------------");
         }
         public static void PrintChainInfo()
         {
@@ -1076,6 +1090,7 @@ namespace firstchain
                 {
                     utxo = new UTXO(TX.rHashKey, TX.Amount, 0);
                     AddDust(utxo);
+                    
                 }
            }
            if ( b.minerToken.mUTXOP != 0)
@@ -1162,15 +1177,12 @@ namespace firstchain
                 {
                     if (ComputeSHA256(TX.sPKey).SequenceEqual(utxo.HashKey))
                     {
-
                         nSold -= TX.Amount + TX.TxFee;
                         nToken = TX.TokenOfUniqueness;
                     }
                     if (TX.rHashKey.SequenceEqual(utxo.HashKey))
                     {
-
                         nSold += TX.Amount;
-
                     }
                 }
                 if ( b.minerToken.mUTXOP != 0)
@@ -2107,7 +2119,7 @@ namespace firstchain
             {
                 Block b = GetBlockAtIndexInFile(i, filePath);
                 if (b == null) { FatalErrorHandler(0); return; } // FATAL ERROR
-                //PrintBlockData(b);
+                PrintBlockData(b);
                 byte[] bytes = BlockToBytes(b);
                 FileInfo f = new FileInfo(blockchainPath);
                 if (f.Length + bytes.Length > BLOCKCHAIN_FILE_CHUNK)
@@ -2533,7 +2545,7 @@ namespace firstchain
         
         public static UTXO GetOfficialUTXOAtPointer(uint pointer) // CAN RETURN NULL
         {
-            if ( pointer >= CURRENT_UTXO_SIZE -40 || pointer <  4) { return null; }
+            if ( pointer > CURRENT_UTXO_SIZE - 40 || pointer <  4) { return null; }
             return BytesToUTXO(GetBytesFromFile(pointer, 40, _folderPath + "utxos"));
         
         }
