@@ -104,6 +104,7 @@ namespace firstchain
 
         //--------------------------------------------------- MAIN CONSENSUS PARAMS : ( if you change this, you have to init a new blockchain ) 
         public static uint WINNING_RUN_DISTANCE = 6; // LONGEST CHAIN WIN RULES DISTANCE
+        public static uint MAX_RETROGRADE = 10; // WHAT IS THE MAXIMUM OF DOWNGRADING BLOCKCHAIN FOR A LIGHT FORK.
         public static uint TARGET_CLOCK = 21; // 2016. NEW HASH TARGET REQUIRED EVERY TARGET_CLOCKth BLOCK
         public static uint TIMESTAMP_TARGET = 11; // TIMESTAMP BLOCK SHOULD BE HIGHER THAN MEDIAN OF LAST TIMESTAMP_TARGETth BLOCK
         public static uint TARGET_TIME = 20160; // 1209600 . number of seconds a block should be mined 10 *  ---> WE SHOULD GET ONE BLOCK EVERY 10S . this is working !!! 
@@ -1440,7 +1441,7 @@ namespace firstchain
             uint latestOfficialIndex = RequestLatestBlockIndex(true);
             
             bool HardFork = false;
-            if ( firstTempIndex <= latestOfficialIndex)
+            if ( firstTempIndex <= latestOfficialIndex - MAX_RETROGRADE) // A FORK CAN BE UP TO 8 MB.
             {
                 if (firstTempIndex == 0) { File.Delete(_filePath); return; }
                 if (latestTempIndex < latestOfficialIndex + WINNING_RUN_DISTANCE) { File.Delete(_filePath); return; }
@@ -1659,9 +1660,9 @@ namespace firstchain
                 {
                     tempTarget = previousBlock.HashTarget;
                 }
-                List<UTXO> vUTXO = new List<UTXO>();  //< can go up to 0.4mb in ram so it is ok... 
+                List<UTXO> vUTXO = new List<UTXO>();  //< can go up to 1.2mb (including retrograde) in ram so it is ok... 
                 // we should update this vUTXO with every block of a fork if fork is needed... also
-                if (_pathToGetPreviousBlock != GetLatestBlockChainFilePath())
+                if (_pathToGetPreviousBlock != GetLatestBlockChainFilePath()) // we absolutely not need to compute retrograde here we just update the fork
                 {
                     uint firstforkIndex = BitConverter.ToUInt32(GetBytesFromFile(4, 8, _pathToGetPreviousBlock), 0);
                     for (uint i = firstforkIndex; i < previousBlock.Index + 1; i++)
@@ -1873,6 +1874,12 @@ namespace firstchain
                 uint latestOfficialIndex = RequestLatestBlockIndex(true);
                 if ( latestIndex >= latestOfficialIndex + WINNING_RUN_DISTANCE)
                 {
+                    uint firstTempIndex = BitConverter.ToUInt32(GetBytesFromFile(4, 8, s), 0);
+                    if ( firstTempIndex < latestOfficialIndex)
+                    {
+                        DowngradeOfficialChain(firstTempIndex-1);
+                        DownGradeUTXOSet(firstTempIndex-1);
+                    }
                     AddBlocksToOfficialChain(s);
                     _found = true;
                     // clear all forks
@@ -2133,8 +2140,10 @@ namespace firstchain
                 UpgradeUTXOSet(b);
             }
         }
-        public static bool isBlockChainValid() //< WE NEED TO FIND A WAY TO REBUILD UTXO SET... 
+        public static bool isBlockChainValid() //< THIS WILL COMPLETELY REBUILD AN UTXO SET. 
         {
+            Console.WriteLine("method work in progress actually. please wait update of this program");
+            return false;
             uint lastIndex = RequestLatestBlockIndex(true);
             Block gen = GetBlockAtIndex(0);
             if ( gen == null) { return false;  }
@@ -2163,7 +2172,7 @@ namespace firstchain
         }
         public static Tuple<bool,List<UTXO>> IsBlockValid(Block b, Block prevb, uint MIN_TIME_STAMP, byte[] HASHTARGET, List<UTXO> vUTXO) 
         {
-
+            uint latestIndex = RequestLatestBlockIndex(true);
             if (!b.previousHash.SequenceEqual(prevb.Hash)) { Console.WriteLine("wrong previous hash"); return new Tuple<bool, List<UTXO>>(false, vUTXO);  }
             uint unixTimestamp = (uint)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
             if (b.TimeStamp < MIN_TIME_STAMP || b.TimeStamp > unixTimestamp) { Console.WriteLine("wrong time stamp"); return new Tuple<bool, List<UTXO>>(false, vUTXO); }
@@ -2204,10 +2213,13 @@ namespace firstchain
                 if(!_sFound)
                 {
                     sutxo = GetOfficialUTXOAtPointer(TX.sUTXOP); 
+                    if (sutxo == null) { return new Tuple<bool, List<UTXO>>(false, vUTXO); }
+                    if ( b.Index <= latestIndex) { sutxo = GetDownGradedVirtualUTXO(b.Index, sutxo);  }
                 }
                 if (!_rFound)
                 {
                     rutxo = GetOfficialUTXOAtPointer(TX.rUTXOP);
+                    if (rutxo != null && b.Index <= latestIndex ) { rutxo = GetDownGradedVirtualUTXO(b.Index, rutxo); }
                 }
                 if (!isTxValidforPending(TX,sutxo)) { Console.WriteLine("wrong TX"); return new Tuple<bool, List<UTXO>>(false, vUTXO); }
                 
@@ -2255,7 +2267,8 @@ namespace firstchain
             }
             if (!_mFound)
             {
-                mutxo = GetOfficialUTXOAtPointer(b.minerToken.mUTXOP); 
+                mutxo = GetOfficialUTXOAtPointer(b.minerToken.mUTXOP);
+                if (mutxo != null && b.Index <= latestIndex) { mutxo = GetDownGradedVirtualUTXO(b.Index, mutxo); }
             }
             
             if ( mutxo != null)
