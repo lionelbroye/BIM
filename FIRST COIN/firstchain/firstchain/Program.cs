@@ -12,7 +12,11 @@ using firstchain.arith256;
 using System.Threading;
 namespace firstchain
 {
+    /*
     
+    CODE BY GGGRAPH
+    
+    */
     class Program
     {
        
