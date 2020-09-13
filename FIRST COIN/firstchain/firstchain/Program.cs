@@ -1659,7 +1659,7 @@ namespace firstchain
                 {
                     tempTarget = previousBlock.HashTarget;
                 }
-                List<UTXO> vUTXO = new List<UTXO>();  
+                List<UTXO> vUTXO = new List<UTXO>();  //< can go up to 0.4mb in ram so it is ok... 
                 // we should update this vUTXO with every block of a fork if fork is needed... also
                 if (_pathToGetPreviousBlock != GetLatestBlockChainFilePath())
                 {
@@ -1671,24 +1671,73 @@ namespace firstchain
                         
                         foreach(Tx TXS in b.Data)
                         {
-                            bool _found = false;
-                            int fIndex = 0;
+                            bool _sFound = false;
+                            int sIndex = 0;
+                            bool _rFound = false;
+                            int rIndex = 0;
+                            UTXO rutxo = null;
+                         
                             for (int a = 0; a < vUTXO.Count; a++)
                             {
                                 if (vUTXO[a].HashKey.SequenceEqual(ComputeSHA256(TXS.sPKey)))
                                 {
-                                    _found = true;
-                                    fIndex = a;
+                                    _sFound = true;
+                                    sIndex = a;
                                 }
+                                if (vUTXO[a].HashKey.SequenceEqual(TXS.rHashKey))
+                                {
+                                    _rFound = true;
+                                    rIndex = a;
+                                    rutxo = vUTXO[a];
+                                }
+                                
                             }
-                            if (!_found)
+                            if (!_sFound)
                             {
                                 vUTXO.Add(UpdateVirtualUTXOWithFullBlock(b, GetOfficialUTXOAtPointer(TXS.sUTXOP), false));
                             }
                             else
                             {
-                                vUTXO[fIndex] = UpdateVirtualUTXOWithFullBlock(b, vUTXO[fIndex], false);
+                                vUTXO[sIndex] = UpdateVirtualUTXOWithFullBlock(b, vUTXO[sIndex], false);
                             }
+                            if (!_rFound)
+                            {
+                                rutxo = GetOfficialUTXOAtPointer(TXS.rUTXOP);
+                                if ( rutxo != null)
+                                {
+                                    vUTXO.Add(UpdateVirtualUTXOWithFullBlock(b, GetOfficialUTXOAtPointer(TXS.rUTXOP), false));
+                                }
+                       
+                            }
+                            else
+                            {
+                                vUTXO[rIndex] = UpdateVirtualUTXOWithFullBlock(b, rutxo, false);
+                            }
+                        }
+                        bool _mFound = false;
+                        int mIndex = 0;
+                        for (int a = 0; a < vUTXO.Count; a++)
+                        {
+                            if (b.minerToken.MinerPKEY.SequenceEqual(vUTXO[a].HashKey))
+                            {
+                                _mFound = true;
+                                mIndex = a;
+                            }
+
+                        }
+                        
+                        if (!_mFound)
+                        {
+                            UTXO mutxo = GetOfficialUTXOAtPointer(b.minerToken.mUTXOP);
+                            if ( mutxo != null)
+                            {
+                                vUTXO.Add(UpdateVirtualUTXOWithFullBlock(b, mutxo, false)); 
+                            }
+                            
+                        }
+                        else
+                        {
+                            vUTXO[mIndex] = UpdateVirtualUTXOWithFullBlock(b, vUTXO[mIndex], false);
                         }
                     }
                 }
@@ -2123,40 +2172,106 @@ namespace firstchain
             //------------------------------------ > WORKING VIRTUALIZING UTXO
             foreach ( Tx TX in b.Data)
             {
-                // [1] we first need to check if all vUTXO contains TX.sutxop
-                // if true --------> UTXO = UTXO of the vUTXO
-                // if else --------> UTXO = getofficialutxoatpointer(tx.sutxop)
-                bool _found = false;
-                int indexF = 0; 
-                UTXO utxo = null;
+                
+                bool _sFound = false;
+                bool _rFound = false;
+                int sIndex = 0; 
+                UTXO sutxo = null;
+                int rIndex = 0;
+                UTXO rutxo = null;
                 for (int i = 0; i < vUTXO.Count; i++)
                 {
-                    if (vUTXO[i].HashKey.SequenceEqual(ComputeSHA256(TX.sPKey)))
+                    if (!_sFound)
                     {
-                        utxo = vUTXO[i];
-                        indexF = i;
-                        _found = true;
-                        break;
+                        if (vUTXO[i].HashKey.SequenceEqual(ComputeSHA256(TX.sPKey)))
+                        {
+                            sutxo = vUTXO[i];
+                            sIndex = i;
+                            _sFound = true;
+                        }
                     }
+                    if (!_rFound)
+                    {
+                        if (vUTXO[i].HashKey.SequenceEqual(TX.rHashKey))
+                        {
+                            rutxo = vUTXO[i];
+                            rIndex = i;
+                            _rFound = true;
+                        }
+                    }
+
                 }
-                if(!_found)
+                if(!_sFound)
                 {
-                    utxo = GetOfficialUTXOAtPointer(TX.sUTXOP); 
+                    sutxo = GetOfficialUTXOAtPointer(TX.sUTXOP); 
                 }
-                if (!isTxValidforPending(TX,utxo)) { Console.WriteLine("wrong TX"); return new Tuple<bool, List<UTXO>>(false, vUTXO); }
+                if (!_rFound)
+                {
+                    rutxo = GetOfficialUTXOAtPointer(TX.rUTXOP);
+                }
+                if (!isTxValidforPending(TX,sutxo)) { Console.WriteLine("wrong TX"); return new Tuple<bool, List<UTXO>>(false, vUTXO); }
                 
                 sumFEE += TX.TxFee;
-                // [2] then we need to update the virtual utxo list with a getvirtualutxo
-                UTXO nUTXO = UpdateVirtualUTXO(TX, utxo, false);
-                if (_found)
+                UTXO nsUTXO = UpdateVirtualUTXO(TX, sutxo, false);
+               
+
+                if (_sFound)
                 {
-                    vUTXO[indexF] = nUTXO;
+                    vUTXO[sIndex] = nsUTXO;
                 }
                 else
                 {
-                    vUTXO.Add(nUTXO);
+                    vUTXO.Add(nsUTXO);
+                }
+                if ( rutxo != null)
+                {
+                    UTXO nrUTXO = UpdateVirtualUTXO(TX, rutxo, false);
+                    if (_rFound)
+                    {
+                        vUTXO[rIndex] = nrUTXO;
+                    }
+                    else
+                    {
+                        vUTXO.Add(nrUTXO);
+                    }
+                }
+               
+            }
+            bool _mFound = false;
+            int mIndex = 0;
+            UTXO mutxo = null;
+
+            for (int i = 0; i < vUTXO.Count; i++)
+            {
+               
+               if (vUTXO[i].HashKey.SequenceEqual(b.minerToken.MinerPKEY))
+               {
+                   mutxo = vUTXO[i];
+                   mIndex = i;
+                   _mFound = true;
+                   break;
+               }
+                
+            }
+            if (!_mFound)
+            {
+                mutxo = GetOfficialUTXOAtPointer(b.minerToken.mUTXOP); 
+            }
+            
+            if ( mutxo != null)
+            {
+                UTXO nmUTXO = UpdateVirtualUTXOWithFullBlock(b, mutxo, false); 
+                if (_mFound)
+                {
+                    vUTXO[mIndex] = nmUTXO;
+                }
+                else
+                {
+                    vUTXO.Add(nmUTXO);
                 }
             }
+           
+
             //------------------------------------ > <
             if ( b.minerToken.mUTXOP != 0)
             {
