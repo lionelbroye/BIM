@@ -12,11 +12,7 @@ using firstchain.arith256;
 using System.Threading;
 namespace firstchain
 {
-    /*
     
-    CODE BY GGGRAPH for esad orleans
-    
-    */
     class Program
     {
        
@@ -109,25 +105,85 @@ namespace firstchain
         //--------------------------------------------------- MAIN CONSENSUS PARAMS : ( if you change this, you have to init a new blockchain ) 
         public static uint WINNING_RUN_DISTANCE = 6; // LONGEST CHAIN WIN RULES DISTANCE
         public static uint MAX_RETROGRADE = 10; // WHAT IS THE MAXIMUM OF DOWNGRADING BLOCKCHAIN FOR A LIGHT FORK.
-        public static uint TARGET_CLOCK = 21; // 2016. NEW HASH TARGET REQUIRED EVERY TARGET_CLOCKth BLOCK
+        public static uint TARGET_CLOCK = 42; // 2016. NEW HASH TARGET REQUIRED EVERY TARGET_CLOCKth BLOCK
         public static uint TIMESTAMP_TARGET = 11; // TIMESTAMP BLOCK SHOULD BE HIGHER THAN MEDIAN OF LAST TIMESTAMP_TARGETth BLOCK
-        public static uint TARGET_TIME = 20160; // 1209600 . number of seconds a block should be mined 10 *  ---> WE SHOULD GET ONE BLOCK EVERY 10S . this is working !!! 
-        public static uint TARGET_DIVIDER_BOUNDARIES = 32; // 4. LIMIT OF NEW TARGET BOUNDARIES (QUARTER + AND QUARTER - )
+        public static uint TARGET_TIME = 40320; // 1209600 . number of seconds a block should be mined 10 *  ---> WE SHOULD GET ONE BLOCK EVERY 10S . this is working !!! 
+        public static uint TARGET_DIVIDER_BOUNDARIES = 4; // 4. LIMIT OF NEW TARGET BOUNDARIES (QUARTER + AND QUARTER - )
         public static uint FIRST_UNIX_TIMESTAMP = 1598981949;
         public static uint NATIVE_REWARD = 50; // COIN GIVE TO FIRST REWARD_DIVIDER_CLOCKth BLOCK
         public static uint REWARD_DIVIDER_CLOCK = 210000; // NUMBER OF BLOCK BEFORE NATIVE REWARD SHOULD BE HALFED
         public static byte[] MAXIMUM_TARGET = StringToByteArray("00000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"); //< MAX HASH TARGET. MINIMUM DIFFICULTY.
         //--------------------------------------------------------------------------------------------------------------------------
+        public static network NT;
+        public static List<uint> PendingDLBlocks = new List<uint>();
+        public static List<uint> PendingDLTXs = new List<uint>();
+        public static List<string> PendingBlockFiles = new List<string>();
+        public static List<string> PendingPTXFiles = new List<string>();
+
 
         static void Main(string[] args)
         {
-            
+            NT = new network();
+            NT.Initialize();
+            //arduino.Initialize();
             CheckFilesAtRoot();
             VerifyFiles();
             PrintArgumentInfo();
-            GetInput();
+            // thread the shit
+            new Thread(() =>
+            {
+                Thread.CurrentThread.IsBackground = true;
+                GetInput();
+            }).Start();
+            while ( true)
+            {
+                for ( int i = PendingDLBlocks.Count-1; i >= 0; i --)
+                {
+                    PendingBlockFiles.Add(ConcatenateDL(PendingDLBlocks[i]));
+                    PendingDLBlocks.RemoveAt(i);
+                }
+                for (int i = PendingDLTXs.Count - 1; i >= 0; i--)
+                {
+                   PendingPTXFiles.Add(ConcatenateDL(PendingDLTXs[i]));
+                   PendingDLTXs.RemoveAt(i);
+                }
+                for (int i = PendingBlockFiles.Count - 1; i >= 0; i--)
+                {
+                    ProccessTempBlocks(PendingBlockFiles[i]);
+                    PendingBlockFiles.RemoveAt(i);
+                }
+                for (int i = PendingPTXFiles.Count - 1; i >= 0; i--)
+                {
+                    ProccessTempTXforPending(PendingBlockFiles[i]);
+                    PendingPTXFiles.RemoveAt(i);
+                }
+            }
+           
+
         }
-       
+        public static string ConcatenateDL(uint index)
+        {
+            string[] files = Directory.GetFiles(_folderPath + "net");
+            string _path = _folderPath + "net\\" + index.ToString(); 
+            File.WriteAllBytes(_path, new byte[0]); // missing 4 bytes
+            List<uint> flist = new List<uint>();
+            foreach (string s in files)
+            {
+                
+                if (s.Contains(_path)){
+                    flist.Add(Convert.ToUInt32(s.Replace(_path+"_","")));
+                }
+            }
+            flist.Sort();
+            foreach ( uint i in flist)
+            {
+                string fPath = _path + "_" + i.ToString();
+                AppendBytesToFile(_path, File.ReadAllBytes(fPath));
+                File.Delete(fPath);
+            }
+            Console.WriteLine(new FileInfo(_path).Length);
+            return _path;
+        }
         //----------------------- COMMAND     ---------------------
         public static void GetInput()
         {
@@ -140,6 +196,10 @@ namespace firstchain
                 {
                     PrintChainInfo();
                     argumentFound = true;
+                }
+                if (argument.Contains("nettest"))
+                {
+                    NT.ThreadingFile(GetLatestBlockChainFilePath(), 1);
                 }
                 if (argument.Contains("getblockinfo"))
                 {
@@ -315,8 +375,15 @@ namespace firstchain
                                 {
                                     uint.TryParse(ntimeArgs, out nTime);
                                 }
+                                /*
+                                while ( true)
+                                {
+                                    StartMining(pkeyHASH, utxopointer, mnlock, 10);
+                                    ProccessTempBlocks(_folderPath + "winblock");
+                                }
+                                */
                                 StartMining(pkeyHASH, utxopointer, mnlock, nTime);
-                                ProccessTempBlocks(_folderPath + "winblock");
+                                PendingBlockFiles.Add(_folderPath + "winblock");
 
 
                                 argumentFound = true;
@@ -572,11 +639,16 @@ namespace firstchain
             {
                 CreateGenesis();
             }
+            if (!Directory.Exists(_folderPath + "net"))
+            {
+                Directory.CreateDirectory(_folderPath + "net");
+            }
             if ( !Directory.Exists(_folderPath + "blockchain"))
             {
                 Directory.CreateDirectory(_folderPath + "blockchain");
                 File.WriteAllBytes(_folderPath + "blockchain\\0", new byte[4]);
                 AppendBytesToFile(_folderPath + "blockchain\\0", File.ReadAllBytes(_folderPath + "genesis"));
+                File.WriteAllBytes(_folderPath + "blockchain\\1", new byte[4]);
             }
             if (!File.Exists(_folderPath + "utxos"))
             {
@@ -671,7 +743,7 @@ namespace firstchain
         {
             uint latestIndex = RequestLatestBlockIndexInFile(_filePath);
             Block b = GetBlockAtIndexInFile(latestIndex, _filePath);
-            if ( b == null) {  return false;  }
+            if ( b == null) { Console.WriteLine("no block at index specify by header :" + latestIndex); return false;  }
             return true;
         }
         //------------------------ BYTE MANIP ---------------------
@@ -795,11 +867,12 @@ namespace firstchain
         }
         public static void AppendBytesToFile(string _filePath, byte[] bytes)
         {
+           
             using (FileStream f = new FileStream(_filePath, FileMode.Append))
             {
                 f.Write(bytes, 0, bytes.Length);
             }
-          
+
         }
         public static void TruncateFile(string _filePath, uint length) // can result an error. cant use file get length. 
         {
@@ -1431,8 +1504,10 @@ namespace firstchain
                     chunkcounter = 0;
                     foreach (Tx TX in txs)
                     {
+                        // we need to find first if this tx not existing in our 
                         if (isTxValidforPending(TX, GetOfficialUTXOAtPointer(TX.sUTXOP))) {
                             AppendBytesToFile(_folderPath + "ptx", TxToBytes(TX));
+                           // NT.SendFile(_folderPath + "ptx", 2); //< Send our PTX File
                         }
                         
                     }
@@ -1449,7 +1524,7 @@ namespace firstchain
         {
             FileInfo f = new FileInfo(_filePath);
             if (f.Length < 8) { File.Delete(_filePath); return; }
-            if (!isHeaderCorrectInBlockFile(_filePath)) { File.Delete(_filePath); return; }
+            if (!isHeaderCorrectInBlockFile(_filePath)) { Console.WriteLine("header incorrect!"); File.Delete(_filePath); return; }
 
             uint firstTempIndex = BitConverter.ToUInt32(GetBytesFromFile(4, 8, _filePath), 0);
             uint latestTempIndex = BitConverter.ToUInt32(GetBytesFromFile(0, 4, _filePath), 0);
@@ -1459,8 +1534,8 @@ namespace firstchain
             bool HardFork = false;
             if ( firstTempIndex <= latestOfficialIndex - MAX_RETROGRADE) // A FORK CAN BE UP TO 8 MB.
             {
-                if (firstTempIndex == 0) { File.Delete(_filePath); return; }
-                if (latestTempIndex < latestOfficialIndex + WINNING_RUN_DISTANCE) { File.Delete(_filePath); return; }
+                if (firstTempIndex == 0) { Console.WriteLine("NO GENESIS ALLOWED !"); File.Delete(_filePath); return; }
+                if (latestTempIndex < latestOfficialIndex + WINNING_RUN_DISTANCE) { Console.WriteLine("NOT WINNING DIST"); File.Delete(_filePath); return; }
                 HardFork = true;
             }
             else
@@ -1591,13 +1666,13 @@ namespace firstchain
                     latestIndex = RequestLatestBlockIndex(false);
                     if ( latestIndex < firstTempIndex - 1)
                     {
-                        File.Delete(_filePath); Console.WriteLine("Can't find a fork to process those blocks. "); return;
+                        File.Delete(_filePath); Console.WriteLine("Can't find a fork to process those blocks. temp index : " + firstTempIndex); return;
                     }
                     else
                     {
                         // check if we can find a fork with this specific block file ... 
                         string forkpath = FindMatchingFork(currentBlockReading);
-                        if ( forkpath.Length == 0) { Console.WriteLine("Can't find a fork to process those blocks. "); File.Delete(_filePath); return; }
+                        if ( forkpath.Length == 0) { Console.WriteLine("Can't find a fork to process those blocks. temp index : " + firstTempIndex); File.Delete(_filePath); return; }
                         else { _pathToGetPreviousBlock = forkpath;  }
                         Block bb = GetBlockAtIndexInFile(latestTempIndex, _filePath);
                         if ( bb == null) { Console.WriteLine("[missing block]"); File.Delete(_filePath); return; }
@@ -1933,6 +2008,7 @@ namespace firstchain
             sum /= (uint)timestamp.Count;
             return sum;
         }
+
         public static uint GetTimeStampRequirementB(List<uint> timestamp) //< will return current timestamp needed  
         {
             
@@ -2140,8 +2216,10 @@ namespace firstchain
                 UpgradeUTXOSet(b);
                 UpdatePendingTXFile(b);
             }
+            //NT.ThreadingFile(GetLatestBlockChainFilePath(), 1);
             Console.WriteLine("Blockchain updated!");
-          
+            //arduino.SendTick("1");
+
         }
         public static void BuildUTXOSet()
         {
@@ -2509,7 +2587,7 @@ namespace firstchain
                     Console.WriteLine("[CONGRATS] YOU MINED A BLOCK!!");
                     Block WinnerBlock = new Block(prevBlock.Index + 1, sha, prevBlock.Hash, TXS, unixTimestamp, MT, HASH_TARGET, nonce);
                     PrintBlockData(WinnerBlock);
-                    
+                   // arduino.SendTick("2");
                     if ( File.Exists(_folderPath + "winblock"))
                     {
                         OverWriteBytesInFile(0, _folderPath + "winblock", BitConverter.GetBytes(WinnerBlock.Index));
@@ -2567,7 +2645,7 @@ namespace firstchain
                     uint dsb = BitConverter.ToUInt32(GetBytesFromFile(byteOffset, 4, filePath), 0);
                     // Console.WriteLine(dsb); //< this is called twice i dont fucking know why ! 
                     byteOffset -= 68;
-                    if (fileLength < byteOffset + 72 + (dsb * 1100) + 80) {  return null; }
+                    if (fileLength < byteOffset + 72 + (dsb * 1100) + 80) { Console.WriteLine("byte missing in file"); return null; }
                     byte[] bytes = GetBytesFromFile(byteOffset, 72 + (dsb * 1100) + 80, filePath);
                     return BytesToBlock(bytes); 
                 }
