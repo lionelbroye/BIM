@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -13,14 +13,13 @@ namespace firstchain
     class network
     {
         /*
-         THERE IS TWO BIG GENERAL ISSUE HERE.FLAG IS NOT WORKING PROPERLY. we need another way. 
-         like first 12 bytes of a packets are info about (WHAT IS THE FILE) (
+     
          ALSO WE ABSOLUTELY NEED TO THROW CLIENT WHEN ANY EXCEPTION COMES OUT! 
          ALSO WE NEED TO REFRESH OUR PEER LIST IF WE LOSE CONTACT WITH SERV. 
+
          */ 
 
         static uint BUFFER_CHUNK = 1000;
-        static uint BUFFER_HEAD = 256; 
 
         public class Server
         {
@@ -38,9 +37,9 @@ namespace firstchain
                 {
                     while (true)
                     {
-                        Console.WriteLine("Waiting for a connection...");
+                        Console.WriteLine("Waiting for connections...");
                         TcpClient client = server.AcceptTcpClient();
-                        Console.WriteLine("Connected!");
+                        Console.WriteLine("New client connected!");
                         Thread t = new Thread(new ParameterizedThreadStart(HandleDeivce));
                         t.Start(client);
                     }
@@ -51,119 +50,143 @@ namespace firstchain
                     server.Stop();
                 }
             }
+
+           
             public void HandleDeivce(Object obj)
             {
-
-                
-
                 TcpClient client = (TcpClient)obj;
                 var stream = client.GetStream();
-
-                uint _flag = 0; 
-                byte[] bytes = new byte[BUFFER_HEAD]; //< we can change the buffer ! 
-                string fileNameHeader = "";
-
-                uint FILE_LENGTH = 0;
-                uint CURRENT_BYTE = 0;
+ 
+                byte[] bytes = new byte[BUFFER_CHUNK]; //< we can change the buffer ! 
+                uint current_packet_id = 0;
+                byte data_flag = 0;
+                uint file_length = 0;
+                uint byteOffset = 0;
+                uint pNumb = 0; //< packet number
+                byte[] hash_checksum = new byte[32];
                 int i;
-                stream.ReadTimeout = 15000;
                 try
                 {
                     while ((i = stream.Read(bytes, 0, bytes.Length)) != 0) //< ca process seulement lorsque je recoit qqchose
                     {
+                        /*
+                            FIRST PACKET STRUCTURE :
+                            (4 bytes) PACKET ID ( empreinte UNIX - ) 
+                            (1 byte) WHAT IS THE DATA -> A TX, A BLOCK  
+                            (4 bytes) FULL FILE LENGTH -> INFO ABOUT THE GENERAL LENGTH OF THE RCVED FILE. 
+                            (32 bytes) HASH CHEKSUM OF FILE (if the hash is wrong we not process it! ) 
+                            (...) data
+                            ALL OTHER PACKET : 
+                            (4 bytes) PACKET ID
+                            (...) data
 
-                        bool _pass = false;
-                        if (_flag == 0)
+                         */
+                        uint pId = BitConverter.ToUInt32(new byte[4] { bytes[0], bytes[1], bytes[2], bytes[3] }, 0);
+                        if ( pId != current_packet_id)
                         {
-                            Random r = new Random();
-                            r.Next(0, int.MaxValue);
-                            fileNameHeader = r.ToString();
-                            uint header = BitConverter.ToUInt32(bytes, 0);
-                            if (header == 1)
+                            // clean files containing pID in dll folder... 
+                            if ( pId != 0)
                             {
-                                _flag = 1;
-                                _pass = true;
-                                FILE_LENGTH = 0;
-                                CURRENT_BYTE = 0;
-                                Console.WriteLine("Will receive Blocks file.");
-                            }
-                            if (header == 2)
-                            {
-                                _flag = 3;
-                                _pass = true;
-                                FILE_LENGTH = 0;
-                                CURRENT_BYTE = 0;
-                                Console.WriteLine("Will receive TX file.");
-                            }
-                        }
-                        if (!_pass)
-                        {
-                            if (_flag == 1 || _flag == 3)
-                            {
-                                FILE_LENGTH = BitConverter.ToUInt32(bytes, 0);
-                                Console.WriteLine("Bytes needed : " + FILE_LENGTH);
-                                if (FILE_LENGTH < BUFFER_CHUNK)
+                                string[] files = Directory.GetFiles(Program._folderPath + "net");
+                                foreach (string s in files)
                                 {
-                                    bytes = new byte[FILE_LENGTH];
-                                }
-                                else
-                                {
-                                    bytes = new byte[BUFFER_CHUNK];
-                                }
-
-                                _pass = true;
-
-                                if (_flag == 1)
-                                {
-                                    _flag = 2;
-                                }
-                                if (_flag == 3)
-                                {
-                                    _flag = 4;
+                                    if (s.Contains(current_packet_id.ToString()))
+                                    {
+                                        File.Delete(s);
+                                    }
                                 }
                             }
-                        }
-                        if (_flag == 2 && !_pass)
-                        {
-                            string namefile = fileNameHeader;
-
-                            if (CURRENT_BYTE == 0)
+                          
+                            current_packet_id = pId;
+                            data_flag = bytes[4];
+                            file_length = BitConverter.ToUInt32(new byte[4] { bytes[5], bytes[6], bytes[7], bytes[8] }, 0);
+                            hash_checksum = new byte[32];
+                            byteOffset = 0;
+                            pNumb = 0;
+                            for (int n = 9; n < 41; n++)
                             {
-                                if (File.Exists(AppDomain.CurrentDomain.BaseDirectory + "\\" + namefile))
-                                {
-                                    // File.Delete(AppDomain.CurrentDomain.BaseDirectory + "\\" + namefile);
-                                }
-                                else
-                                {
-                                    // File.Create(AppDomain.CurrentDomain.BaseDirectory + "\\" + namefile);
-                                }
+                                hash_checksum[n - 9] = bytes[n];
                             }
-                            Console.WriteLine("Writing " + bytes.Length + " bytes at " + CURRENT_BYTE);
-                            //while ( File.)
-                            // Program.AppendBytesToFile(AppDomain.CurrentDomain.BaseDirectory + "\\" + namefile, bytes); //< GET AN ERROR HERE !!! CAUSE WE USE THREADING...
-                            CURRENT_BYTE += (uint)bytes.Length;
-
-                            if (FILE_LENGTH < CURRENT_BYTE + BUFFER_CHUNK) // we verify if file length is ok 
+                            if ( file_length < BUFFER_CHUNK - 41) // REMINDER : 41 bytes is the length of the header of the first packet
                             {
-                                //  chunk = chunk - (byteOffset + chunk - fLength);
-                                bytes = new byte[BUFFER_CHUNK - (CURRENT_BYTE + BUFFER_CHUNK - FILE_LENGTH)];
+                                byte[] bwrite = new byte[file_length];
+                                for (int n = 41; n < file_length + 41; n++)
+                                {
+                                    bwrite[n-41] = bytes[n];
+                                }
+                                File.WriteAllBytes(Program._folderPath + "net\\" + current_packet_id.ToString() + "_" + pNumb.ToString(), bwrite);
+                                Console.WriteLine("file downloaded!");
+                                switch (data_flag)
+                                {
+                                    case 1:
+                                        Program.PendingDLBlocks.Add(current_packet_id);
+                                        break;
+                                    case 2:
+                                        Program.PendingDLTXs.Add(current_packet_id);
+                                        break;
+                                }
+                                current_packet_id = 0; // init cpaket id to avoid erasing it! 
                             }
                             else
                             {
-                                bytes = new byte[BUFFER_CHUNK];
+                                // we need to get byte of this header ... 
+                                byte[] bwrite = new byte[BUFFER_CHUNK - 41];
+                                for (int n = 41; n < BUFFER_CHUNK ; n++)
+                                {
+                                    bwrite[n - 41] = bytes[n];
+                                }
+                              
+                                File.WriteAllBytes(Program._folderPath + "net\\" + current_packet_id.ToString() + "_" + pNumb.ToString(), bwrite);
+                                byteOffset += BUFFER_CHUNK - 41;
+                                Console.WriteLine("downloading status : " + byteOffset +"/" + file_length); // OK ! 
                             }
-                            if (CURRENT_BYTE == FILE_LENGTH)
-                            {
-                                Console.WriteLine("Download Done");
-                                // Program.ProccessTempBlocks(AppDomain.CurrentDomain.BaseDirectory + "\\" + namefile);
-                                _flag = 0;
-                            }
-
+                            
                         }
-
-                        //i = 0;
-                        stream.Write(bytes, 0, bytes.Length);
-
+                        else
+                        {
+                            pNumb++;
+                            // OVERWRITE EVERY BYTE EXCEPT IF BYTEOFFSET+
+                            if (file_length < byteOffset + BUFFER_CHUNK - 4 ) // Reminder : header 4 bytes for other packet
+                            {
+                                // WE ARE MISSING 4 BYTES HERE!!!!
+                                byte[] bwrite = new byte[BUFFER_CHUNK - (byteOffset + BUFFER_CHUNK - file_length)]; 
+                                for (int n = 4; n < 4+BUFFER_CHUNK - (byteOffset + BUFFER_CHUNK - file_length); n++)
+                                {
+                                    bwrite[n - 4] = bytes[n];
+                                }
+                                File.WriteAllBytes(Program._folderPath + "net\\" + current_packet_id.ToString() + "_" + pNumb.ToString(), bwrite);
+                                byteOffset += (uint)bwrite.Length;
+                                Console.WriteLine("downloading status :" + byteOffset + "/" + file_length + " " + bwrite.Length); // OK !
+                                Console.WriteLine("file downloaded!");
+                                switch (data_flag)
+                                {
+                                    case 1:
+                                        Program.PendingDLBlocks.Add(current_packet_id);
+                                        break;
+                                    case 2:
+                                        Program.PendingDLTXs.Add(current_packet_id);
+                                        break;
+                                }
+                                
+                                
+                                current_packet_id = 0; // init cpaket id to avoid erasing it! 
+                            }
+                            else
+                            {
+                                byte[] bwrite = new byte[BUFFER_CHUNK - 4];
+                                for (int n = 4; n < bytes.Length; n++)
+                                {
+                                    bwrite[n - 4] = bytes[n];
+                                }
+                                File.WriteAllBytes(Program._folderPath + "net\\" + current_packet_id.ToString() + "_" + pNumb.ToString(), bwrite);
+                                byteOffset += BUFFER_CHUNK -4 ;
+                                Console.WriteLine("downloading status :" + byteOffset + "/" + file_length + " " + bwrite.Length); // OK !
+                            }
+               
+                        }
+                        
+                        stream.Write(bytes, 0, bytes.Length); // just a ping back... It is always important...  
+                       
                     }
                 }
                 catch (Exception e)
@@ -171,35 +194,23 @@ namespace firstchain
                     if (!client.Connected)
                     {
                         Console.WriteLine("peer disconnect");
-                        client.Close();
-                        return;
                     }
                     else
                     {
                         Console.WriteLine(e.ToString());
-                        Console.WriteLine("thread should be init");
-
-                        // Thread t = new Thread(new ParameterizedThreadStart(HandleDeivce));
-                        // t.Start(client);
                     }
+                    client.Close();
 
                 }
-                /*
-                while ( true)
-               {
-
-               }
-               */
             }
         }
-
+       
         public List<TcpClient> clients; //< list of all of my peers!  
 
         public void Initialize()
         {
             clients = new List<TcpClient>();
             string[] netinfos = File.ReadAllLines(AppDomain.CurrentDomain.BaseDirectory + "\\peers.txt");
-            Int32 Port = int.Parse(netinfos[0]);
             if ( netinfos.Length < 1)
             {
                 Console.WriteLine("Please put net info !");
@@ -208,15 +219,16 @@ namespace firstchain
             Thread t = new Thread(delegate ()
             {
                 // replace the IP with your system IP Address...
-                Server myserver = new Server(netinfos[1], Port);
+                Server myserver = new Server(netinfos[0].Split(':')[0], int.Parse(netinfos[0].Split(':')[1]));
             });
             t.Start();
 
             Console.WriteLine("Server Started...!");
 
-            for (int i = 2; i < netinfos.Length; i++)
+            for (int i = 1; i < netinfos.Length; i++)
             {
-                string ip = netinfos[i];
+                string ip = netinfos[i].Split(':')[0];
+                Int32 Port = int.Parse(netinfos[i].Split(':')[1]);
                 new Thread(() =>
                 {
                     Thread.CurrentThread.IsBackground = true;
@@ -230,16 +242,13 @@ namespace firstchain
         {
             try
             {
-
-            //  Console.WriteLine("client connecté = " + clients[peerIndex].Connected);
-            clients[peerIndex].ReceiveTimeout = 5000;
-            // stream.ReadTimeout = 5000;
-           
-
+                
+                //clients[peerIndex].ReceiveTimeout = 5000;
+               
                 NetworkStream stream = clients[peerIndex].GetStream();
-                // Send the message to the connected TcpServer. 
+                stream.ReadTimeout = 5000;
                 stream.Write(data, 0, data.Length);
-                stream.Read(data, 0, data.Length);
+                stream.Read(data, 0, data.Length); // this could create issue ! 
             }
             catch ( Exception e)
             {
@@ -255,34 +264,67 @@ namespace firstchain
                    // Console.WriteLine(e.ToString());
                 }
             }
-            //< should use a specific wait 
         }
 
-        public void SendFile (string _fPath, byte header, int i)
+        public void SendFile (string _fPath, byte header, int i) // this is kind of awful
         {
-            byte[] data = new byte[1] { header };
-            SendData(data, i); //< SEND HEADER
-            uint fLength = (uint)new FileInfo(_fPath).Length;
-            data = BitConverter.GetBytes(fLength);
-            SendData(data, i); //< SEND FILELENGTH INFO
+
+            /*
+                            FIRST PACKET STRUCTURE :
+                            (4 bytes) PACKET ID ( empreinte UNIX - ) 
+                            (1 byte) WHAT IS THE DATA -> A TX, A BLOCK  
+                            (4 bytes) FULL FILE LENGTH -> INFO ABOUT THE GENERAL LENGTH OF THE RCVED FILE. 
+                            (32 bytes) HASH CHEKSUM OF FILE (if the hash is wrong we not process it! ) 
+                            (...) data
+                            ALL OTHER PACKET : 
+                            (4 bytes) PACKET ID
+                            (...) data
+
+            */
+            uint unixTimestamp = (uint)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
+            uint fLength = (uint)new FileInfo(_fPath).Length; // THIS CAN CAUSE A PROB ! 
+            byte[] checksum = Program.ComputeSHA256(File.ReadAllBytes(_fPath)); // can take some time! 
+            // REMINDER : 41 bytes is the length of the header of the first packet
             uint byteOffset = 0;
-            while (byteOffset < fLength)
+            
+            List<byte> DataBuilder = new List<byte>();
+            DataBuilder = Program.AddBytesToList(DataBuilder, BitConverter.GetBytes(unixTimestamp));
+            DataBuilder = Program.AddBytesToList(DataBuilder, new byte[1] { header });
+            DataBuilder = Program.AddBytesToList(DataBuilder, BitConverter.GetBytes(fLength));
+            DataBuilder = Program.AddBytesToList(DataBuilder, checksum);
+            // dbbytes is header of the first packet! 
+            if (fLength < BUFFER_CHUNK - 41) // REMINDER : 41 bytes is the length of the header of the first packet
             {
-                uint chunk = BUFFER_CHUNK;
+                DataBuilder = Program.AddBytesToList(DataBuilder, File.ReadAllBytes(_fPath));
+                SendData(Program.ListToByteArray(DataBuilder), i);
+                return;
+            }
+            else
+            {
+                DataBuilder = Program.AddBytesToList(DataBuilder, Program.GetBytesFromFile(byteOffset, BUFFER_CHUNK - 41, _fPath));
+                SendData(Program.ListToByteArray(DataBuilder), i);
+                byteOffset += BUFFER_CHUNK - 41;  // OK JUSQUE LA
+            }
+            //byte[] data;
+            while ( byteOffset < fLength)
+            {
+                DataBuilder = new List<byte>();
+                DataBuilder = Program.AddBytesToList(DataBuilder, BitConverter.GetBytes(unixTimestamp));
+                uint chunk = BUFFER_CHUNK - 4;
                 if (byteOffset + chunk > fLength)
                 {
                     chunk = chunk - (byteOffset + chunk - fLength);
 
                 }
-
-                data = Program.GetBytesFromFile(byteOffset, chunk, _fPath);
-
-
-                SendData(data, i); //< SEND FILE CHUNK BY CHUNK ! 
+                DataBuilder = Program.AddBytesToList(DataBuilder, Program.GetBytesFromFile(byteOffset, chunk, _fPath));
+                SendData(Program.ListToByteArray(DataBuilder), i);
                 byteOffset += chunk;
+                Console.WriteLine("uploading status : " + byteOffset + "/" + fLength + " " + chunk);
             }
+
+           
         }
-        
+
         public void ThreadingFile(string _fPath, byte header) //< WILL SEND FULL BLOCKCHAIN 
         {
 
