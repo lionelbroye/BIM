@@ -325,10 +325,10 @@ namespace firstchain
            
         }
 
-        public void ThreadingFile(string _fPath, byte header) //< WILL SEND FULL BLOCKCHAIN 
+        public void BroadcastFile(string _fPath, byte header) //< WILL SEND ANY FILE... ( like a ptx, a unique tx, a fork, a specific bloc file etc. ) 
         {
 
-            for (int i = 0;  i < clients.Count; i++) // Should be MULTITHREADED ! 
+            for (int i = 0;  i < clients.Count; i++) 
             {
                 int index = i;
                 new Thread(() =>
@@ -338,6 +338,126 @@ namespace firstchain
                 }).Start();
             }
           
+
+        }
+
+        public Tuple<uint[],byte[]> GetChunkBytesinBlockchainFiles(uint chunksize, uint byteOffset, uint fileOffset) //< this will help ! :3
+        {
+            // chunk size is the number of byte we need to extract. byteOffset is pointer of byte at start. when reset it equals 4 cause we dont include header, fileoffset is file starting searching...
+            // we return a tuple like this . item 1 : byte[2]{byteOffsetatend,fileOffsetatend} item2 : byte array of length chunksize! 
+            List<byte> DataBuilder = new List<byte>();
+            string filePath = Program._folderPath + "blockchain\\" + fileOffset.ToString();
+            uint currentFileLength = (uint)new FileInfo(filePath).Length;
+            while (DataBuilder.Count < chunksize)
+            {
+                
+                uint chunk = chunksize;
+                if (byteOffset + chunk > currentFileLength)
+                {
+                    chunk = chunk - (byteOffset + chunk - currentFileLength);
+
+                }
+                DataBuilder = Program.AddBytesToList(DataBuilder, Program.GetBytesFromFile(byteOffset, chunk, filePath));
+                if ( chunk != chunksize)
+                {
+                    fileOffset++;
+                    byteOffset = 4;
+                    filePath = Program._folderPath + "blockchain\\" + fileOffset.ToString();
+                    currentFileLength = (uint)new FileInfo(filePath).Length;
+                }
+                else
+                {
+                    byteOffset += chunk;
+                }
+               
+            }
+
+            return new Tuple<uint[], byte[]>(new uint[2] { byteOffset, fileOffset }, Program.ListToByteArray(DataBuilder));
+        }
+
+        public void SendBlockChain(uint indexStart, uint offsetStart, string fileStart,  uint indexEnd, uint offsetEnd, string fileEnd,  int i) 
+        {
+            // Nous avons besoin d'avoir ces differentes arguments : uint start (index fo block start), uint end ( index of last block ) 
+            // nous avons pour cela avoir besoin de startOffset du fichier contenant le 1er bloc et du endOffset contenant la fin du dernier bloc . 
+            // de cette manière nous pouvons alors determiner le filelength! et nous pourrons tranquillement broadcaster la data avec les chunks!  
+            uint unixTimestamp = (uint)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
+            byte header = 1;
+            // get the length 
+            uint fLength = 0;
+            uint fsInt = uint.Parse(fileStart.Replace(Program._folderPath + "blockchain\\", ""));
+            uint feInt = uint.Parse(fileEnd.Replace(Program._folderPath + "blockchain\\", ""));
+            fLength += (uint)new FileInfo(fileStart).Length - offsetStart- 4;
+            for (uint n = fsInt +1 ; n < feInt; n++) // can cause eventually an error ! 
+            {
+                fLength += (uint)new FileInfo(Program._folderPath + "blockchain\\" + n.ToString()).Length - 4; 
+            }
+
+            fLength += offsetEnd - 4;
+            fLength += 4; // we will include header! 
+            byte[] checksum = new byte[32]; // we dont compute the hash here. It was a bad idea... too slow.. 
+        
+            List<byte> DataBuilder = new List<byte>();
+            DataBuilder = Program.AddBytesToList(DataBuilder, BitConverter.GetBytes(unixTimestamp));
+            DataBuilder = Program.AddBytesToList(DataBuilder, new byte[1] { header });
+            DataBuilder = Program.AddBytesToList(DataBuilder, BitConverter.GetBytes(fLength));
+            DataBuilder = Program.AddBytesToList(DataBuilder, checksum);
+            DataBuilder = Program.AddBytesToList(DataBuilder, BitConverter.GetBytes(indexEnd)); // we include a custom header
+            uint fileOffset = fsInt;
+            uint byteOffsetB = 4;
+            uint byteOffset = 4;
+            if (fLength < BUFFER_CHUNK - 45) // REMINDER : 41 bytes is the length of the header of the first packet
+            {
+                Tuple<uint[], byte[]> chunkedData = GetChunkBytesinBlockchainFiles(fLength, offsetStart, fileOffset); 
+                DataBuilder = Program.AddBytesToList(DataBuilder, chunkedData.Item2);
+                SendData(Program.ListToByteArray(DataBuilder), i);
+                return;
+            }
+            else
+            {
+                Tuple<uint[], byte[]> chunkedData = GetChunkBytesinBlockchainFiles(BUFFER_CHUNK-45, offsetStart, fileOffset);
+                DataBuilder = Program.AddBytesToList(DataBuilder, chunkedData.Item2);
+                fileOffset = chunkedData.Item1[1];
+                byteOffsetB = chunkedData.Item1[0];
+                SendData(Program.ListToByteArray(DataBuilder), i);
+                byteOffset += BUFFER_CHUNK - 45;  // probably need to see if we write 41 and not 45 ... 
+            }
+            while (byteOffset < fLength)
+            {
+                DataBuilder = new List<byte>();
+                DataBuilder = Program.AddBytesToList(DataBuilder, BitConverter.GetBytes(unixTimestamp));
+                uint chunk = BUFFER_CHUNK - 4;
+                if (byteOffset + chunk > fLength)
+                {
+                    chunk = chunk - (byteOffset + chunk - fLength);
+                }
+                Tuple<uint[], byte[]> chunkedData = GetChunkBytesinBlockchainFiles(chunk, byteOffsetB, fileOffset);
+                DataBuilder = Program.AddBytesToList(DataBuilder, chunkedData.Item2);
+                fileOffset = chunkedData.Item1[1];
+                byteOffsetB = chunkedData.Item1[0];
+                // we absolutely need to get some extra info from this function like the latest file Offset and the latestoffsetStart! 
+
+                SendData(Program.ListToByteArray(DataBuilder), i);
+                byteOffset += chunk;
+                Console.WriteLine("uploading status : " + byteOffset + "/" + fLength + " " + chunk);
+            }
+
+        }
+        public void BroadcastBlockchain(uint start, uint end ) //< WILL SEND A LIST OF BLOCKS FROM INDEX START TO INDEX END 
+        {
+            Tuple<uint[], string> sInfo = Program.GetBlockPointerAtIndex(start);
+            Tuple<uint[], string> eInfo = Program.GetBlockPointerAtIndex(end);
+            if ( sInfo == null || eInfo == null) { Console.WriteLine("unable to broadcast blockchain beacause of bad pointer");  return;  }
+            if ( end < start) { return; }
+            for (int i = 0; i < clients.Count; i++)
+            {
+                int index = i;
+                new Thread(() =>
+                {
+                    Thread.CurrentThread.IsBackground = true;
+                    SendBlockChain(start, sInfo.Item1[0], sInfo.Item2, end, eInfo.Item1[1], eInfo.Item2, i);
+                }).Start();
+            }
+
 
         }
         public void Connect(String server, Int32 Port)
