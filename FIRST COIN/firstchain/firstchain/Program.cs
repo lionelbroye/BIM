@@ -15,7 +15,11 @@ namespace firstchain
     
     class Program
     {
-       
+        /*
+         hard fork ok 
+         voir light fork
+
+         */
         public class Block
         {
             public uint Index { get; } // 4 o
@@ -120,6 +124,7 @@ namespace firstchain
         public static List<string> PendingBlockFiles = new List<string>();
         public static List<string> PendingPTXFiles = new List<string>();
 
+       
 
         static void Main(string[] args)
         {
@@ -1666,7 +1671,12 @@ namespace firstchain
                     latestIndex = RequestLatestBlockIndex(false);
                     if ( latestIndex < firstTempIndex - 1)
                     {
-                        File.Delete(_filePath); Console.WriteLine("Can't find a fork to process those blocks. temp index : " + firstTempIndex); return;
+                        _pathToGetPreviousBlock = GetIndexBlockChainFilePath(firstTempIndex - 1);
+                        if (_pathToGetPreviousBlock == "")
+                        {
+                            File.Delete(_filePath); Console.WriteLine("Can't find a fork to process those blocks. temp index : " + firstTempIndex); return;
+                        }
+                        
                     }
                     else
                     {
@@ -2706,6 +2716,26 @@ namespace firstchain
             foreach (string s in files) { flist.Add(Convert.ToUInt32(Path.GetFileName(s))); }
             flist.Sort();
             return _folderPath + "blockchain\\" + flist[flist.Count - 1].ToString();
+        }
+        public static string GetIndexBlockChainFilePath(uint pointer ) //<---- return a filepath Official Only !
+        {
+
+            string[] files = Directory.GetFiles(_folderPath + "blockchain");
+            List<uint> flist = new List<uint>();
+            foreach (string s in files) { flist.Add(Convert.ToUInt32(Path.GetFileName(s))); }
+            flist.Sort();
+
+            string filePath = "";
+            foreach (uint a in flist)
+            {
+                uint lastIndex = RequestLatestBlockIndexInFile(_folderPath + "blockchain\\" + a.ToString());
+                if (lastIndex >= pointer)
+                {
+                    filePath = _folderPath + "blockchain\\" + a.ToString();
+                    break;
+                }
+            }
+            return filePath;
         }
         public static uint RequestLatestBlockIndex(bool onlyOfficial) // can do an error
         {
