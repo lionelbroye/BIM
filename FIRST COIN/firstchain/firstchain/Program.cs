@@ -16,8 +16,9 @@ namespace firstchain
     class Program
     {
         /*
-         hard fork ok 
-         voir light fork
+          verify every proccess mode working ( without tx )
+                > Sending Mode : BroadcastFile (can be tx or a block file) or BroadcastBlockchain ( send specific block... )
+
 
          */
         public class Block
@@ -204,7 +205,26 @@ namespace firstchain
                 }
                 if (argument.Contains("nettest"))
                 {
-                    NT.ThreadingFile(GetLatestBlockChainFilePath(), 1);
+                    string s = argument.Replace("getblockinfo", "");
+                    s = s.Replace(" ", "");
+                    uint cmd = 0;
+                    if ( uint.TryParse(s, out cmd) )
+                    {
+                        switch ( cmd)
+                        {
+                            case 1:
+                                NT.BroadcastFile(GetLatestBlockChainFilePath(),1); // will broadcast the latest blockchain chunk file
+                                break;
+                            case 2:
+                                NT.BroadcastBlockchain(1, RequestLatestBlockIndex(true)); // will broadcast the full blockchain (every file) 
+                                break;
+                            case 3:
+                                NT.BroadcastFile(_folderPath+"ptx", 2); // will broadcast the full pending transaction file
+                                break;
+                        }
+                    }
+
+                    // NT.ThreadingFile(GetLatestBlockChainFilePath(), 1);
                 }
                 if (argument.Contains("getblockinfo"))
                 {
@@ -1552,6 +1572,7 @@ namespace firstchain
             }
             if (HardFork)
             {
+                Console.WriteLine("hard forking");
                 Block currentBlockReading = GetBlockAtIndexInFile(firstTempIndex, _filePath);
                 Block previousBlock = GetBlockAtIndex(firstTempIndex-1);
                 if (currentBlockReading == null || previousBlock == null) { File.Delete(_filePath); return; }
@@ -2666,7 +2687,48 @@ namespace firstchain
                 if (fileLength < byteOffset + 72) {  return null; }
             }
         }
-        
+        public static Tuple<uint[],string> GetBlockPointerAtIndex(uint pointer) //< will return a Tuple  
+        {
+
+            string[] files = Directory.GetFiles(_folderPath + "blockchain");
+            List<uint> flist = new List<uint>();
+            foreach (string s in files) { flist.Add(Convert.ToUInt32(Path.GetFileName(s))); }
+            flist.Sort();
+
+            string filePath = "";
+            foreach (uint a in flist)
+            {
+                uint lastIndex = RequestLatestBlockIndexInFile(_folderPath + "blockchain\\" + a.ToString());
+                if (lastIndex >= pointer)
+                {
+                    filePath = _folderPath + "blockchain\\" + a.ToString();
+                    break;
+                }
+            }
+            if (filePath.Length == 0) { return null; }
+            uint byteOffset = 4;
+            uint fileLength = (uint)new FileInfo(filePath).Length;
+            if (fileLength < 76) { return null; }
+            while (true)
+            {
+                if (BitConverter.ToUInt32(GetBytesFromFile(byteOffset, 4, filePath), 0) == pointer)
+                {
+                    byteOffset += 68;
+                    uint dsb = BitConverter.ToUInt32(GetBytesFromFile(byteOffset, 4, filePath), 0);
+                    byteOffset -= 68;
+                    if (fileLength < byteOffset + 72 + (dsb * 1100) + 80) { return null; }
+
+                    return new Tuple<uint[], string>(new uint[2] { byteOffset, byteOffset + 72 + (dsb * 1100) + 80 }, filePath);
+                    
+                }
+                byteOffset += 68;
+                uint ds = BitConverter.ToUInt32(GetBytesFromFile(byteOffset, 4, filePath), 0);
+                byteOffset -= 68;
+                byteOffset += 72 + (ds * 1100) + 80;
+                if (fileLength < byteOffset + 72) { return null; }
+            }
+
+        }
         public static Block GetBlockAtIndex(uint pointer) //< --- return a specific block at index. Fork NOT Included! Return a null Block if CANT BE BE FOUND
         {
        
