@@ -13,11 +13,18 @@ namespace firstchain
     class network
     {
         /*
-     
-         ALSO WE ABSOLUTELY NEED TO THROW CLIENT WHEN ANY EXCEPTION COMES OUT! 
-         ALSO WE NEED TO REFRESH OUR PEER LIST IF WE LOSE CONTACT WITH SERV. 
+         *  __________________________________ RING TOPOLOGY ________________________________
+         * [state 1]
+         * TRY CONNECT TO ONE PEER OF THE LIST. THEN ASK NETINFO ( topology and peerlist )
+         *          --> during this, this one peer will try to contact everyone to present you in the network. IF SUCCESS GO TO [state 2]
+         * [state 2] You update peerlist and generate peertopology file. You connect to your dedicate peer. 
+         * 
+         * IF someone leaves the network ( can occurs if disconnected ) This one will contact everyone to signal it in the network. IF SUCCESS GO TO [state 3]
+         * 
+         * [state 3]
+         * Everyone update peerlist and generate new peertopology file. Connect to their dedicate peer if their peer changed. 
 
-         */ 
+         */
 
         static uint BUFFER_CHUNK = 1000;
 
@@ -358,6 +365,7 @@ namespace firstchain
 
                 }
                 DataBuilder = Program.AddBytesToList(DataBuilder, Program.GetBytesFromFile(byteOffset, chunk, filePath));
+                Console.WriteLine("retrieving data : " + DataBuilder.Count + "/" + chunksize + " " + chunk);
                 if ( chunk != chunksize)
                 {
                     fileOffset++;
@@ -380,19 +388,20 @@ namespace firstchain
             // Nous avons besoin d'avoir ces differentes arguments : uint start (index fo block start), uint end ( index of last block ) 
             // nous avons pour cela avoir besoin de startOffset du fichier contenant le 1er bloc et du endOffset contenant la fin du dernier bloc . 
             // de cette manière nous pouvons alors determiner le filelength! et nous pourrons tranquillement broadcaster la data avec les chunks!  
+            Console.WriteLine(offsetStart + " " + offsetEnd);
             uint unixTimestamp = (uint)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
             byte header = 1;
             // get the length 
             uint fLength = 0;
             uint fsInt = uint.Parse(fileStart.Replace(Program._folderPath + "blockchain\\", ""));
             uint feInt = uint.Parse(fileEnd.Replace(Program._folderPath + "blockchain\\", ""));
-            fLength += (uint)new FileInfo(fileStart).Length - offsetStart- 4;
+            fLength += (uint)new FileInfo(fileStart).Length - offsetStart;
             for (uint n = fsInt +1 ; n < feInt; n++) // can cause eventually an error ! 
             {
-                fLength += (uint)new FileInfo(Program._folderPath + "blockchain\\" + n.ToString()).Length - 4; 
+                fLength += (uint)new FileInfo(Program._folderPath + "blockchain\\" + n.ToString()).Length - 4;
             }
 
-            fLength += offsetEnd - 4;
+            fLength += (uint)new FileInfo(fileEnd).Length - offsetEnd;
             fLength += 4; // we will include header! 
             byte[] checksum = new byte[32]; // we dont compute the hash here. It was a bad idea... too slow.. 
         
@@ -420,6 +429,7 @@ namespace firstchain
                 byteOffsetB = chunkedData.Item1[0];
                 SendData(Program.ListToByteArray(DataBuilder), i);
                 byteOffset += BUFFER_CHUNK - 45;  // probably need to see if we write 41 and not 45 ... 
+                Console.WriteLine("uploading status : " + byteOffset + "/" + fLength );
             }
             while (byteOffset < fLength)
             {
@@ -444,23 +454,25 @@ namespace firstchain
         }
         public void BroadcastBlockchain(uint start, uint end ) //< WILL SEND A LIST OF BLOCKS FROM INDEX START TO INDEX END 
         {
+            Console.WriteLine("we are here a");
             Tuple<uint[], string> sInfo = Program.GetBlockPointerAtIndex(start);
             Tuple<uint[], string> eInfo = Program.GetBlockPointerAtIndex(end);
             if ( sInfo == null || eInfo == null) { Console.WriteLine("unable to broadcast blockchain beacause of bad pointer");  return;  }
             if ( end < start) { return; }
+            Console.WriteLine("we are here");
             for (int i = 0; i < clients.Count; i++)
             {
                 int index = i;
                 new Thread(() =>
                 {
                     Thread.CurrentThread.IsBackground = true;
-                    SendBlockChain(start, sInfo.Item1[0], sInfo.Item2, end, eInfo.Item1[1], eInfo.Item2, i);
+                    SendBlockChain(start, sInfo.Item1[0], sInfo.Item2, end, eInfo.Item1[1], eInfo.Item2, index);
                 }).Start();
             }
 
 
         }
-        public void Connect(String server, Int32 Port)
+        public void Connect(String server, Int32 Port) 
         {
             Int32 port = Port;
             TcpClient client;  
