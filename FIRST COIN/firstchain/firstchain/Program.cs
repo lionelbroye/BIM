@@ -119,18 +119,33 @@ namespace firstchain
         public static uint REWARD_DIVIDER_CLOCK = 210000; // NUMBER OF BLOCK BEFORE NATIVE REWARD SHOULD BE HALFED
         public static byte[] MAXIMUM_TARGET = StringToByteArray("00000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"); //< MAX HASH TARGET. MINIMUM DIFFICULTY.
         //--------------------------------------------------------------------------------------------------------------------------
+
+       //--------------------------------------- BROADCAST INFO --------------------------------------------
+       public class BroadcastInfo
+       {
+            public byte flag { get; } 
+            public string filePath { get; }
+            public byte header { get;  }
+            public BroadcastInfo(byte fl, byte head = 1,  string fp  = "") 
+            {
+                this.flag = fl;
+                this.filePath = fp;
+                this.header = head;
+            }
+       }
         public static network NT;
         public static List<uint> PendingDLBlocks = new List<uint>();
         public static List<uint> PendingDLTXs = new List<uint>();
         public static List<string> PendingBlockFiles = new List<string>();
         public static List<string> PendingPTXFiles = new List<string>();
-
-       
+        public static uint BROADCAST_BLOCKS_LIMIT = 30; // MAX NUMBER OF BLOCK I WANT TO BROADCAST WHEN UPLOADING MY BC. IF 0. BROADCAST THE FULL. 
+        public static uint BROADCAST_FULL_BLOCKCHAIN_CLOCK = 60; // I SHOULD BROADCAST THE FULL EVERY HOUR... like SET A CLOCK HERE ( minute )
+        public static uint LATEST_FBROADCAST_TICK = 0;
+        public static List<BroadcastInfo> BroadcastQueue = new List<BroadcastInfo>();
 
         static void Main(string[] args)
         {
-            NT = new network();
-            NT.Initialize();
+           
             //arduino.Initialize();
             CheckFilesAtRoot();
             VerifyFiles();
@@ -163,6 +178,13 @@ namespace firstchain
                     ProccessTempTXforPending(PendingBlockFiles[i]);
                     PendingPTXFiles.RemoveAt(i);
                 }
+                if ( PendingBlockFiles.Count == 0 && PendingPTXFiles.Count == 0 && BroadcastQueue.Count > 0 ) // NEED RULE 2
+                {
+                    if ( NT != null)
+                    {
+                        BroadCast(BroadcastQueue[0]);
+                    }
+                }
             }
            
 
@@ -171,7 +193,7 @@ namespace firstchain
         {
             string[] files = Directory.GetFiles(_folderPath + "net");
             string _path = _folderPath + "net\\" + index.ToString(); 
-            File.WriteAllBytes(_path, new byte[0]); // missing 4 bytes
+            File.WriteAllBytes(_path, new byte[0]); // missing 4 bytes // USE THIS FOR CREATING A FILE! NO FILECREATE SVP! 
             List<uint> flist = new List<uint>();
             foreach (string s in files)
             {
@@ -190,6 +212,42 @@ namespace firstchain
             Console.WriteLine(new FileInfo(_path).Length);
             return _path;
         }
+        //----------------------- RAW BROADCAST COMMAND     ---------------------
+        public static void BroadCast(BroadcastInfo b)
+        {
+       
+            uint unixTimestamp = (uint)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalMinutes; // min ! 
+           
+                switch ( b.flag)
+                {
+                    case 1:
+                        NT.BroadcastFile(b.filePath, b.header);
+                        BroadcastQueue.RemoveAt(0);
+                        break;
+                    case 2:
+                       if ( unixTimestamp > LATEST_FBROADCAST_TICK + BROADCAST_FULL_BLOCKCHAIN_CLOCK)
+                        {
+                            uint latestIndex = RequestLatestBlockIndex(true);
+                            NT.BroadcastBlockchain(1, latestIndex);
+                            BroadcastQueue = new List<BroadcastInfo>(); 
+                            LATEST_FBROADCAST_TICK = unixTimestamp;
+                        }
+                        else
+                        {
+                            uint latestIndex = RequestLatestBlockIndex(true);
+                            int startI = (int)(latestIndex - BROADCAST_BLOCKS_LIMIT);
+                            if (startI < 1) { startI = 1; ; }
+                            NT.BroadcastBlockchain((uint)startI, latestIndex);
+                            BroadcastQueue.RemoveAt(0);
+
+                        }
+                        break; 
+                }
+           
+            
+
+
+        }
         //----------------------- COMMAND     ---------------------
         public static void GetInput()
         {
@@ -203,29 +261,88 @@ namespace firstchain
                     PrintChainInfo();
                     argumentFound = true;
                 }
-                if (argument.Contains("nettest"))
+                if (argument.Contains("setbrcparam"))
                 {
-                    string s = argument.Replace("getblockinfo", "");
-                    s = s.Replace(" ", "");
-                    uint cmd = 0;
-                    if ( uint.TryParse(s, out cmd) )
+                    string maxArgs = GetStringAfterArgs(argument, "max:");
+                    string fbcArgs = GetStringAfterArgs(argument, "fbc:");
+                    uint max = 0;
+                    uint fbc = 0;
+                    if ( uint.TryParse(maxArgs, out max))
                     {
-                        switch ( cmd)
-                        {
-                            case 1:
-                                NT.BroadcastFile(GetLatestBlockChainFilePath(),1); // will broadcast the latest blockchain chunk file
-                                break;
-                            case 2:
-                                NT.BroadcastBlockchain(1, RequestLatestBlockIndex(true)); // will broadcast the full blockchain (every file) 
-                                break;
-                            case 3:
-                                NT.BroadcastFile(_folderPath+"ptx", 2); // will broadcast the full pending transaction file
-                                break;
-                        }
+                        BROADCAST_BLOCKS_LIMIT = max;
+                        Console.WriteLine("new broadcast blocks max limit : " + BROADCAST_BLOCKS_LIMIT);
+                    }
+                    if (uint.TryParse(fbcArgs, out fbc))
+                    {
+                        BROADCAST_FULL_BLOCKCHAIN_CLOCK = fbc;
+                        Console.WriteLine("full blockchain will be broadcast every " + BROADCAST_FULL_BLOCKCHAIN_CLOCK + " minutes. ");
+                    }
+                    argumentFound = true;
+                }
+                if ( argument == "netconnect")
+                {
+                    uint unixTimestamp = (uint)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalMinutes;
+                    LATEST_FBROADCAST_TICK = unixTimestamp;
+                    NT = new network();
+                    NT.Initialize();
+                    argumentFound = true;
+                }
+                if ( argument == "nettest 1")
+                {
+                    if ( NT != null)
+                    {
+                        NT.BroadcastFile(GetLatestBlockChainFilePath(), 1);
+                    }
+                    else
+                    {
+                        Console.WriteLine("You're offline. Please use netconnect to get online. ");
                     }
 
-                    // NT.ThreadingFile(GetLatestBlockChainFilePath(), 1);
+                    argumentFound = true;
                 }
+                if (argument.Contains("nettest 2"))
+                {
+                    if (NT != null)
+                    {
+                        string s = argument.Replace("nettest 2", "");
+                        s = s.Replace(" ", "");
+                        string[] args = s.Split(':');
+                        if (args.Length == 2)
+                        {
+                            uint start = 0;
+                            uint end = 0;
+                            if (uint.TryParse(args[0], out start) && uint.TryParse(args[1], out end))
+                            {
+                                Console.WriteLine("sending from " + start + " to " + end);
+                                NT.BroadcastBlockchain(start, end);
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine("wrong args");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("You're offline. Please use netconnect to get online. ");
+                    }
+
+                    argumentFound = true;
+                }
+                if (argument == "nettest 3")
+                {
+                    if (NT != null)
+                    {
+                        NT.BroadcastFile(_folderPath + "ptx", 2);
+                    }
+                    else
+                    {
+                        Console.WriteLine("You're offline. Please use netconnect to get online. ");
+                    }
+            
+                    argumentFound = true;
+                }
+
                 if (argument.Contains("getblockinfo"))
                 {
                     string s = argument.Replace("getblockinfo", "");
@@ -392,7 +509,7 @@ namespace firstchain
                             if (Continue)
                             {
                                 uint mnlock = 5000;
-                                uint nTime = 1;
+                                uint nTime = 0;
                                 if ( minlockArgs.Length != 0) {
                                     uint.TryParse(minlockArgs, out mnlock);
                                 }
@@ -400,15 +517,21 @@ namespace firstchain
                                 {
                                     uint.TryParse(ntimeArgs, out nTime);
                                 }
-                                /*
-                                while ( true)
+                                if ( nTime == 0)
                                 {
-                                    StartMining(pkeyHASH, utxopointer, mnlock, 10);
-                                    ProccessTempBlocks(_folderPath + "winblock");
+                                    while (true)
+                                    {
+                                        StartMining(pkeyHASH, utxopointer, mnlock, 1);
+                                        ProccessTempBlocks(_folderPath + "winblock");
+                                    }
                                 }
-                                */
-                                StartMining(pkeyHASH, utxopointer, mnlock, nTime);
-                                PendingBlockFiles.Add(_folderPath + "winblock");
+                                else
+                                {
+                                    StartMining(pkeyHASH, utxopointer, mnlock, nTime);
+                                    PendingBlockFiles.Add(_folderPath + "winblock");
+
+                                }
+                                
 
 
                                 argumentFound = true;
@@ -597,6 +720,8 @@ namespace firstchain
             ////newtx sprkey: spukey: sutxop: amount: rpukey: rutxop: fee: lock:
             Console.WriteLine("Create Transaction -> newtx sprkey:# spukey:# sutxop:# amount:# rpukey:# rutxop:# fee:# lock:#");
             Console.WriteLine("Add Pending Transaction  -> reqtx #");
+            Console.WriteLine("Connect to nodes         -> netconnect");
+            Console.WriteLine("Set Broadcast parameter  -> setbrcparam max:# fbc:#");
             Console.WriteLine("Print this               -> getcmdinfo");
             Console.WriteLine("");
         }
@@ -858,25 +983,46 @@ namespace firstchain
 
             if (ValidYesOrNo("[FATAL ERROR] Should reinit chain and close app")) { ClearAllFiles(); Environment.Exit(0); }
            
-        } 
-    
+        }
 
+      
         //------------------------------------------------------
-
-        public static byte[] GetBytesFromFile(uint startIndex, uint length, string _filePath) // can result an error. cant use file get length. 
+        public static MemoryMappedFile MemFile(string path) //< CONSTRUCTOR TO CREATE A  MAPPED FILE with fileshare.read ... 
         {
-            using (MemoryMappedFile memoryMappedFile = MemoryMappedFile.CreateFromFile(_filePath)) 
-            {
-                using (MemoryMappedViewStream memoryMappedViewStream = memoryMappedFile.CreateViewStream(startIndex, length))
-                {
-                    byte[] result = new byte[length];
-                    for (uint i = 0; i < length; i++)
-                    {
-                        result[i] = (byte)memoryMappedViewStream.ReadByte();
-                    }
+            return MemoryMappedFile.CreateFromFile( 
+                      //include a readonly shared stream
+                      File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read),
+                      //not mapping to a name
+                      null,
+                      //use the file's actual size
+                      0L,
+                      //read only access
+                      MemoryMappedFileAccess.Read,
+                      //not configuring security
+                      null,
+                      //adjust as needed
+                      HandleInheritability.None,
+                      //close the previously passed in stream when done
+                      false);
 
-                    return result;
+        }
+        public static byte[] GetBytesFromFile(uint startIndex, uint length, string _filePath)
+        {
+            // using (MemoryMappedFile memoryMappedFile = MemoryMappedFile.CreateFromFile(_filePath)) 
+            //{
+            // using (MemoryMappedViewStream memoryMappedViewStream = memoryMappedFile.CreateViewStream(startIndex, length, MemoryMappedFileAccess.Read))
+            using (MemoryMappedFile memFile = MemFile(_filePath))
+            { 
+            using (MemoryMappedViewStream memoryMappedViewStream = memFile.CreateViewStream(startIndex, length, MemoryMappedFileAccess.Read))
+            {
+                byte[] result = new byte[length];
+                for (uint i = 0; i < length; i++)
+                {
+                    result[i] = (byte)memoryMappedViewStream.ReadByte();
                 }
+
+                return result;
+            }
             }
         }
         public static void OverWriteBytesInFile(uint startIndex, string _filePath, byte[] bytes) // can result an error. cant use file get length. 
@@ -1690,20 +1836,20 @@ namespace firstchain
                 if ( firstTempIndex != latestOfficialIndex + 1)
                 {
                     latestIndex = RequestLatestBlockIndex(false);
-                    if ( latestIndex < firstTempIndex - 1)
+                    if ( latestIndex > firstTempIndex - 1)
                     {
                         _pathToGetPreviousBlock = GetIndexBlockChainFilePath(firstTempIndex - 1);
                         if (_pathToGetPreviousBlock == "")
                         {
-                            File.Delete(_filePath); Console.WriteLine("Can't find a fork to process those blocks. temp index : " + firstTempIndex); return;
+                            File.Delete(_filePath); Console.WriteLine("[1]Can't find a fork to process those blocks. temp index : " + firstTempIndex); return;
                         }
                         
                     }
                     else
                     {
-                        // check if we can find a fork with this specific block file ... 
+                        // check if we can find a fork with this specific block file ... goes here when lightfork ... 
                         string forkpath = FindMatchingFork(currentBlockReading);
-                        if ( forkpath.Length == 0) { Console.WriteLine("Can't find a fork to process those blocks. temp index : " + firstTempIndex); File.Delete(_filePath); return; }
+                        if ( forkpath.Length == 0) { Console.WriteLine("[2]Can't find a fork to process those blocks. temp index : " + firstTempIndex); File.Delete(_filePath); return; }
                         else { _pathToGetPreviousBlock = forkpath;  }
                         Block bb = GetBlockAtIndexInFile(latestTempIndex, _filePath);
                         if ( bb == null) { Console.WriteLine("[missing block]"); File.Delete(_filePath); return; }
@@ -1884,14 +2030,23 @@ namespace firstchain
                             Console.WriteLine("new fork added");
                             UpdatePendingTXFileB(newPath);
                             VerifyRunState();
-
+                            // we should verify if newpath exist. if it is existing we broadcast it
+                            if (File.Exists(newPath))
+                            {
+                                BroadcastQueue.Add(new BroadcastInfo(1, 1, newPath));
+                            }
                             return;
                         }
                         else
                         {
                             // we will need to concatenate those two forks... to write a new one ... 
-                            ConcatenateForks(_pathToGetPreviousBlock, _filePath, firstTempIndex);
+                            string newForkPath = ConcatenateForks(_pathToGetPreviousBlock, _filePath, firstTempIndex);
                             VerifyRunState();
+                            // we should verify if newpath exist. if it is existing we broadcast it
+                            if (File.Exists(newForkPath))
+                            {
+                                BroadcastQueue.Add(new BroadcastInfo(1, 1, newForkPath));
+                            }
                             Console.WriteLine("fork has been append.");
                             return;
                         }
@@ -2162,7 +2317,7 @@ namespace firstchain
         }
 
 
-        public static void ConcatenateForks(string _path1, string _path2, uint endIndex )
+        public static string ConcatenateForks(string _path1, string _path2, uint endIndex )
         {
             // will get block of _path1 until endindex(not include) , then procceed to write full block of path2
             string newForkPath = GetNewForkFilePath();
@@ -2172,20 +2327,21 @@ namespace firstchain
             for (uint i = startIndex + 1; i < endIndex ; i++)
             {
                 Block b = GetBlockAtIndexInFile(i, _path1);
-                if ( b == null) { File.Delete(_path2); return; } // FATAL ERROR
+                if ( b == null) { File.Delete(_path2); return ""; } // FATAL ERROR
                 byte[] bytes = BlockToBytes(b);
                 AppendBytesToFile(newForkPath, bytes);
             }
             for (uint i = endIndex; i < LastIndex +  1; i++)
             {
                 Block b = GetBlockAtIndexInFile(i, _path2);
-                if (b == null) { File.Delete(_path2); FatalErrorHandler(0); return; } // FATAL ERROR
+                if (b == null) { File.Delete(_path2); FatalErrorHandler(0); return ""; } // FATAL ERROR
                 byte[] bytes = BlockToBytes(b);
                 AppendBytesToFile(newForkPath, bytes);
                 UpdatePendingTXFile(b);
             }
             OverWriteBytesInFile(0, newForkPath, BitConverter.GetBytes(LastIndex)); 
             File.Delete(_path2);
+            return newForkPath;
         }
         public static void DowngradeOfficialChain(uint pointer) //< downgrade blockchain to specific length ( block#pointer not included!)
         {
@@ -2247,7 +2403,7 @@ namespace firstchain
                 UpgradeUTXOSet(b);
                 UpdatePendingTXFile(b);
             }
-            //NT.ThreadingFile(GetLatestBlockChainFilePath(), 1);
+            BroadcastQueue.Add(new BroadcastInfo(2, 1));
             Console.WriteLine("Blockchain updated!");
             //arduino.SendTick("1");
 
