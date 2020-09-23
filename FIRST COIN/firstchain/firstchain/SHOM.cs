@@ -79,7 +79,7 @@ namespace firstchain
                 if (sLine != null)
                     dtreceived = sLine;
             }
-
+            Console.WriteLine(dtreceived);
             // ----------------------------------------> GET LAST DATA
 
        
@@ -102,9 +102,33 @@ namespace firstchain
             {
                 Console.WriteLine("not found...");
             }
+            Console.WriteLine("_______________________________");
+            Console.WriteLine("   Times where water was between 0.55 and 0.60    ");
+            Console.WriteLine("_______________________________");
+            List<SHOMData> shoms = GetTimeStampWaterLevel(GetAllSHOMData(dtreceived.ToCharArray()), 0.55f, 0.60f);
+            if ( shoms.Count > 0)
+            {
+                Console.WriteLine(shoms[0].timestamp.ToString() + " to " + shoms[shoms.Count - 1].timestamp.ToString());
+            }
+            else
+            {
+                Console.WriteLine("no data found!");
+            }
+       
         }
 
-
+        public static List<SHOMData> GetTimeStampWaterLevel(List<SHOMData> shoms, float minValue, float maxValue)
+        {
+            List<SHOMData> result = new List<SHOMData>();
+            foreach ( SHOMData shom in shoms)
+            {
+                if ( shom.value >= minValue && shom.value <= maxValue)
+                {
+                    result.Add(shom);
+                }
+            }
+            return result;
+        }
         public static SHOMData StringToSHOMData(string result)
         {
             //{"idstation":22,"idsource":1,"value":0.6337,"timestamp":"2020/09/23 10:37:20"}]}
