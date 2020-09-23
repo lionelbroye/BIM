@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -48,10 +48,10 @@ namespace firstchain
         public static List<SHOMData> GetShomDatafromPeriod(int station, uint tsStart, uint tsEnd)
         {
             //-----------------------------------------------------------> { WARNING }ask multiple time the shit if sup than one month or less that one day ...  
-
+            station = 22;
 
             DateTime dateStart = UnixTimeStampToDateTime(tsStart);
-            dateStart = dateStart.AddMinutes(-15);
+            dateStart = dateStart.AddDays(-1);//dateStart.AddMinutes(-15);
             DateTime dateEnd = UnixTimeStampToDateTime(tsEnd);
             string datestartstr = dateStart.Year.ToString() + "-" + dateStart.Month.ToString() + "-" + dateStart.Day.ToString();
             string dateendstr = dateEnd.Year.ToString() + "-" + dateEnd.Month.ToString() + "-" + dateEnd.Day.ToString();
@@ -77,7 +77,7 @@ namespace firstchain
                 return new List<SHOMData>();
             }
 
-
+            
             StreamReader objReader = new StreamReader(objStream);
             string dtreceived = "";
             string sLine = "";
@@ -88,7 +88,7 @@ namespace firstchain
                 if (sLine != null)
                     dtreceived = sLine;
             }
-
+            
             return GetAllSHOMData(dtreceived.ToCharArray());
 
         }
@@ -134,9 +134,8 @@ namespace firstchain
                     dtreceived = sLine;
             }
             
-
             // ----------------------------------------> ANOTHER EXAMPLE OF THE LAST DATA
-                Console.WriteLine("_______________________________");
+            Console.WriteLine("_______________________________");
                 Console.WriteLine("     Latest data received      ");
                 Console.WriteLine("_______________________________");
                 SHOMData lastresult = GetLastData(dtreceived.ToCharArray());
@@ -206,20 +205,24 @@ namespace firstchain
         public static SHOMData StringToSHOMData(string result)
         {
             //{"idstation":22,"idsource":1,"value":0.6337,"timestamp":"2020/09/23 10:37:20"}]}
-
-
+            
             int idstation = 0;
             int idsource = 0;
             float value = 0;
             string[] parser = result.Split(',');
-            if ( parser.Length != 3) { return null;  }
+            if ( parser.Length != 4) {
+                foreach( string s in parser)
+                {
+                   // Console.WriteLine(s);
+                }
+                Console.WriteLine("bad length : " + parser.Length);  return null;  }
             int.TryParse(parser[0].Replace("{\"idstation\":", ""), out idstation);
             int.TryParse(parser[1].Replace("\"idsource\":", ""), out idsource);
             string fparsing = parser[2].Replace('.', ',');
             float.TryParse(fparsing.Replace("\"value\":", ""), out value);
             // parse the space --- >  
             string tsparsing = parser[3].Replace("\"timestamp\":\"", "");
-            tsparsing = tsparsing.Replace("\"}]}", "");
+            tsparsing = tsparsing.Replace("\"}]}", ""); // there is something weird here.... 
             // now i have 2020/09/23 10:37:20
             string[] YMD = tsparsing.Split(' ')[0].Split('/');
             int year = 0;
@@ -252,14 +255,9 @@ namespace firstchain
                 {
                     latestOpenedBrackets = i;
                     List<char> stringBuild = new List<char>();
-                    int bracketcount = 0;
                     for (int n = latestOpenedBrackets; n < data.Length; n++)
                     {
                         if (data[n] == '}')
-                        {
-                            bracketcount++;
-                        }
-                        if (bracketcount == 2)
                         {
                             break;
                         }
@@ -272,7 +270,10 @@ namespace firstchain
                         result += c;
                     }
                     SHOMData sd = StringToSHOMData(result);
-                    resultdata.Add(sd);
+                    if ( sd != null) { resultdata.Add(sd);
+                       // sd.print();
+                    }
+                    
 
                 }
             }
@@ -296,7 +297,7 @@ namespace firstchain
             SHOMData result = null; 
             foreach (SHOMData shom in resultdata)
             {
-                int cp = DateTime.Compare(dt, shom.timestamp);
+                int cp = DateTime.Compare(shom.timestamp, dt );
                 if (cp < 0)
                 {
                     result = shom; 
