@@ -147,7 +147,7 @@ namespace firstchain
         //--------------------------------------- THE SEA IN THE CONSENSUS --------------------------------------------
         public static float SEA_MINLEVEL = 0.1f;
         public static float SEA_MAXLEVEL = 10f;
-        public static float SEA_FORCE = 1f;
+        public static float SEA_FORCE = 1.5f; //< should be more powered like 2.5f or 3f or more .... 
 
         static void Main(string[] args)
         {
@@ -2320,22 +2320,33 @@ namespace firstchain
         public static byte[] ApplyTheSeaToTheCryptoPuzzle(byte[] Current_Target, SHOM.SHOMData shom)
         {
             // apply the water height to the difficulty of cryptographic puzzle ! 
+            if( shom == null) { return Current_Target;  }
             float currentwaterlevel = shom.value;
             float midpoint = (SEA_MAXLEVEL + SEA_MINLEVEL) / 2;
             float prct = currentwaterlevel / midpoint;
             prct = (float)Math.Pow(prct, SEA_FORCE);
-            // multiply per the difference from mid point 
-
+            int PRECISION = 1000; // using this current precision could be more 0. will see.
+            prct *= PRECISION;
+            int prctInt = (int)prct;
+            
             BigInteger b1 = BytesToUint256(Current_Target);
-            BigInteger mult = new BigInteger(prct);
+            BigInteger mult = new BigInteger(prctInt); 
+            BigInteger prec = new BigInteger(PRECISION);
+            Console.WriteLine(mult);
+            Console.WriteLine(prec);
             b1 = BigInteger.Multiply(b1, mult);
-
-            BigInteger maxtarget = BytesToUint256(MAXIMUM_TARGET); //< cant be higher than max target ... 
+            b1 = BigInteger.Divide(b1, prec);
+            BigInteger maxtarget = BytesToUint256(MAXIMUM_TARGET); 
             if (b1.CompareTo(maxtarget) == 1)
             {
                 b1 = BytesToUint256(MAXIMUM_TARGET);
             }
-            
+            /*
+            Console.WriteLine(new BigInteger(Current_Target));
+            Console.WriteLine("-->");
+            Console.WriteLine(b1); // ca a diminué 
+            shom.print();
+            */
             return Uint256ToByteArray(b1);
         }
       
