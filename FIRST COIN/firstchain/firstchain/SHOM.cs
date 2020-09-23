@@ -114,9 +114,31 @@ namespace firstchain
             {
                 Console.WriteLine("water never between those value today :!");
             }
-       
-        }
+            Console.WriteLine("_______________________________");
+            Console.WriteLine("   Lowest and highest water value from this request   ");
+            Console.WriteLine("_______________________________");
+            float[] result = GetLowestandHighestWaterLevel(GetAllSHOMData(dtreceived.ToCharArray()));
+            Console.WriteLine(" niveau de l'eau le plus bas durant cette periode  :  " + result[0].ToString() + " m. ");
+            Console.WriteLine(" niveau de l'eau le plus haut durant cette periode :  " + result[1].ToString() + " m. ");
 
+        }
+        public static float[] GetLowestandHighestWaterLevel(List<SHOMData> shoms)
+        {
+            float lowest = float.MaxValue;
+            float highest = 0f;
+            foreach (SHOMData shom in shoms)
+            {
+                if (shom.value < lowest )
+                {
+                    lowest = shom.value; 
+                }
+                if (shom.value > highest)
+                {
+                    highest = shom.value;
+                }
+            }
+            return new float[2] { lowest, highest };
+        }
         public static List<SHOMData> GetTimeStampWaterLevel(List<SHOMData> shoms, float minValue, float maxValue)
         {
             List<SHOMData> result = new List<SHOMData>();
