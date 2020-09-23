@@ -136,10 +136,10 @@ namespace firstchain
         public static network NT;
         public static List<uint> PendingDLBlocks = new List<uint>();
         public static List<uint> PendingDLTXs = new List<uint>();
-        public static List<string> PendingBlockFiles = new List<string>();
-        public static List<string> PendingPTXFiles = new List<string>();
+        public static List<Tuple<bool,string>> PendingBlockFiles = new List<Tuple<bool, string>>(); 
+        public static List<Tuple<bool, string>> PendingPTXFiles = new List<Tuple<bool, string>>();
         public static uint BROADCAST_BLOCKS_LIMIT = 30; // MAX NUMBER OF BLOCK I WANT TO BROADCAST WHEN UPLOADING MY BC. IF 0. BROADCAST THE FULL. 
-        public static uint BROADCAST_FULL_BLOCKCHAIN_CLOCK = 60; // I SHOULD BROADCAST THE FULL EVERY HOUR... like SET A CLOCK HERE ( minute )
+        public static uint BROADCAST_FULL_BLOCKCHAIN_CLOCK = 1; // I SHOULD BROADCAST THE FULL EVERY HOUR... like SET A CLOCK HERE ( minute ) // should be 60 
         public static uint LATEST_FBROADCAST_TICK = 0;
         public static List<BroadcastInfo> BroadcastQueue = new List<BroadcastInfo>();
 
@@ -150,39 +150,56 @@ namespace firstchain
             CheckFilesAtRoot();
             VerifyFiles();
             PrintArgumentInfo();
-            // thread the shit
             new Thread(() =>
             {
                 Thread.CurrentThread.IsBackground = true;
                 GetInput();
             }).Start();
+
             while ( true)
             {
                 for ( int i = PendingDLBlocks.Count-1; i >= 0; i --)
                 {
-                    PendingBlockFiles.Add(ConcatenateDL(PendingDLBlocks[i]));
+                    PendingBlockFiles.Add(new Tuple<bool,string>(false,ConcatenateDL(PendingDLBlocks[i])));
                     PendingDLBlocks.RemoveAt(i);
                 }
                 for (int i = PendingDLTXs.Count - 1; i >= 0; i--)
                 {
-                   PendingPTXFiles.Add(ConcatenateDL(PendingDLTXs[i]));
+                   PendingPTXFiles.Add(new Tuple<bool, string>(false, ConcatenateDL(PendingDLTXs[i])));
                    PendingDLTXs.RemoveAt(i);
                 }
                 for (int i = PendingBlockFiles.Count - 1; i >= 0; i--)
                 {
-                    ProccessTempBlocks(PendingBlockFiles[i]);
+                    ProccessTempBlocks(PendingBlockFiles[i].Item2, PendingBlockFiles[i].Item1); 
                     PendingBlockFiles.RemoveAt(i);
                 }
                 for (int i = PendingPTXFiles.Count - 1; i >= 0; i--)
                 {
-                    ProccessTempTXforPending(PendingBlockFiles[i]);
+                    ProccessTempTXforPending(PendingPTXFiles[i].Item2, PendingPTXFiles[i].Item1);
                     PendingPTXFiles.RemoveAt(i);
                 }
-                if ( PendingBlockFiles.Count == 0 && PendingPTXFiles.Count == 0 && BroadcastQueue.Count > 0 ) // NEED RULE 2
+                if ( PendingBlockFiles.Count == 0 && PendingPTXFiles.Count == 0 && BroadcastQueue.Count > 0 ) 
                 {
                     if ( NT != null)
                     {
-                        BroadCast(BroadcastQueue[0]);
+                        bool _cS = false;
+                        foreach( network.ExtendedPeer ex in NT.mPeers)
+                        {
+                            if (ex.currentlySending)
+                            {
+                                _cS = true;
+                                break;
+                            }
+                        }
+                        if (!_cS)
+                        {
+                            BroadCast(BroadcastQueue[0]);
+                        }
+                        else
+                        {
+                            //Console.WriteLine("currently sending");
+                        }
+                  
                     }
                 }
             }
@@ -228,6 +245,7 @@ namespace firstchain
                        if ( unixTimestamp > LATEST_FBROADCAST_TICK + BROADCAST_FULL_BLOCKCHAIN_CLOCK)
                         {
                             uint latestIndex = RequestLatestBlockIndex(true);
+                        Console.WriteLine("broadcast = " + latestIndex);
                             NT.BroadcastBlockchain(1, latestIndex);
                             BroadcastQueue = new List<BroadcastInfo>(); 
                             LATEST_FBROADCAST_TICK = unixTimestamp;
@@ -236,7 +254,8 @@ namespace firstchain
                         {
                             uint latestIndex = RequestLatestBlockIndex(true);
                             int startI = (int)(latestIndex - BROADCAST_BLOCKS_LIMIT);
-                            if (startI < 1) { startI = 1; ; }
+                        Console.WriteLine("broadcast = " + latestIndex);
+                        if (startI < 1) { startI = 1; ; }
                             NT.BroadcastBlockchain((uint)startI, latestIndex);
                             BroadcastQueue.RemoveAt(0);
 
@@ -260,6 +279,27 @@ namespace firstchain
                 {
                     PrintChainInfo();
                     argumentFound = true;
+                }
+                if ( argument.Contains("rqshom"))
+                {
+                    string s = argument.Replace("rqshom", "");
+
+                    s = s.Replace(" ", "");
+                    int index = 0;
+                    if ( int.TryParse(s, out index) )
+                    {
+                        DateTime today = DateTime.Now; //new DateTime(dateStart.Year, dateStart.Month, dateStart.Day, 11, 15, 0);
+                        DateTime amodif = new DateTime(2020, 09, 23, 14, 58, 20); // annee,mois,jour,heure,minute,seconde
+                        DateTime tomorrow = today.AddDays(1);
+                        SHOM.GetSHOMData(index, amodif, tomorrow);
+                        argumentFound = true;
+                    }
+                    else
+                    {
+                        Console.WriteLine("bad arguments ");
+                    }
+                    argumentFound = true;
+
                 }
                 if (argument.Contains("setbrcparam"))
                 {
@@ -457,8 +497,11 @@ namespace firstchain
                 }
                 if (argument == "initchain")
                 {
-                    if (ValidYesOrNo("[WARNING] It will delete UTXO Set, blockchain files, PTX file and forks."))
-                    { ClearAllFiles(); CheckFilesAtRoot();PrintChainInfo(); }
+                    
+                    if (ValidYesOrNo("[WARNING] It will delete UTXO Set, blockchain files, PTX file and forks. You will be disconnected! "))
+                    {
+                        NT = null; // we should close nt
+                        ClearAllFiles(); CheckFilesAtRoot();PrintChainInfo(); }
                     argumentFound = true;
                 }
 
@@ -521,14 +564,21 @@ namespace firstchain
                                 {
                                     while (true)
                                     {
+                                        Console.WriteLine("mining in finito");
+                                        // wait that pendingblockfiles are empty and broadcast is empty
+                                        while ( PendingBlockFiles.Count != 0 || BroadcastQueue.Count != 0) {
+                                            Console.WriteLine(PendingBlockFiles.Count + " " + BroadcastQueue.Count);
+                                            Thread.Sleep(500);
+                                        } 
                                         StartMining(pkeyHASH, utxopointer, mnlock, 1);
-                                        ProccessTempBlocks(_folderPath + "winblock");
+                                        PendingBlockFiles.Add(new Tuple<bool,string>(true,_folderPath + "winblock"));
                                     }
                                 }
                                 else
                                 {
+                                    Console.WriteLine("start mining " + nTime + " times ");
                                     StartMining(pkeyHASH, utxopointer, mnlock, nTime);
-                                    PendingBlockFiles.Add(_folderPath + "winblock");
+                                    PendingBlockFiles.Add(new Tuple<bool,string>(true,_folderPath + "winblock"));
 
                                 }
                                 
@@ -598,7 +648,7 @@ namespace firstchain
                     string txPath = getfilePath(argument.ToCharArray());
                     if (File.Exists(txPath))
                     {
-                        ProccessTempTXforPending(txPath);
+                        PendingPTXFiles.Add(new Tuple<bool, string>(true, txPath));
                         argumentFound = true;
                     }
                     else
@@ -793,6 +843,11 @@ namespace firstchain
             {
                 Directory.CreateDirectory(_folderPath + "net");
             }
+            else
+            {
+                Directory.Delete(_folderPath + "net", true);
+                Directory.CreateDirectory(_folderPath + "net");
+            }
             if ( !Directory.Exists(_folderPath + "blockchain"))
             {
                 Directory.CreateDirectory(_folderPath + "blockchain");
@@ -978,10 +1033,10 @@ namespace firstchain
 
         }
 
-        public static void FatalErrorHandler(uint err)
+        public static void FatalErrorHandler(uint err, string msg = "")
         {
 
-            if (ValidYesOrNo("[FATAL ERROR] Should reinit chain and close app")) { ClearAllFiles(); Environment.Exit(0); }
+            if (ValidYesOrNo("[FATAL ERROR] Should reinit chain and close app : " + msg)) { ClearAllFiles(); Environment.Exit(0); }
            
         }
 
@@ -1324,13 +1379,13 @@ namespace firstchain
            foreach (Tx TX in b.Data)
            {
                 UTXO utxo = GetOfficialUTXOAtPointer(TX.sUTXOP);
-                if ( utxo == null) { FatalErrorHandler(0); return; } // FATAL ERROR 
+                if ( utxo == null) { FatalErrorHandler(0, "no utxo found during upgrade utxo set"); return; } // FATAL ERROR 
                 utxo = UpdateVirtualUTXO(TX, utxo, false);
                 OverWriteUTXOAtPointer(TX.sUTXOP, utxo);
                 if ( TX.rUTXOP != 0)
                 {
                     utxo = GetOfficialUTXOAtPointer(TX.rUTXOP);
-                    if (utxo == null) { FatalErrorHandler(0); return; } // FATAL ERROR
+                    if (utxo == null) { FatalErrorHandler(0, "no utxo found during upgrade utxo set"); return; } // FATAL ERROR
                     utxo = UpdateVirtualUTXO(TX, utxo, false);
                     OverWriteUTXOAtPointer(TX.rUTXOP, utxo);
                 }
@@ -1344,7 +1399,7 @@ namespace firstchain
            if ( b.minerToken.mUTXOP != 0)
            {
                 UTXO utxo = GetOfficialUTXOAtPointer(b.minerToken.mUTXOP);
-                if (utxo == null) { FatalErrorHandler(0); return; } // FATAL ERROR
+                if (utxo == null) { FatalErrorHandler(0, "no utxo found during upgrade utxo set"); return; } // FATAL ERROR
                 uint mSold = utxo.Sold + b.minerToken.MiningReward;
                 uint mTOU = utxo.TokenOfUniqueness+1;
                 OverWriteUTXOAtPointer(b.minerToken.mUTXOP, new UTXO(b.minerToken.MinerPKEY, mSold, mTOU));
@@ -1362,15 +1417,15 @@ namespace firstchain
         public static void DownGradeUTXOSet(uint index) //< Apply when changing Official Blockchain Only. OverWriting UTXO depend of previous transaction. Compute dust.
         {
             uint DustCount = 0;
-            for (uint i = RequestLatestBlockIndex(false); i > index; i--)
+            for (uint i = RequestLatestBlockIndex(true); i > index; i--)
             {
                 if (i == uint.MaxValue) { break; }
                 Block b = GetBlockAtIndex(i);
-                if ( b == null) { FatalErrorHandler(0); return; } // FATAL ERROR
+                if ( b == null) { FatalErrorHandler(0, "no block found during downgrade utxo set"); return; } // FATAL ERROR
                 if (b.minerToken.mUTXOP != 0)
                 {
                     UTXO utxo = GetOfficialUTXOAtPointer(b.minerToken.mUTXOP);
-                    if (utxo == null) { FatalErrorHandler(0); return; } // FATAL ERROR
+                    if (utxo == null) { FatalErrorHandler(0, "no utxo found during downgrade utxo set"); return; } // FATAL ERROR
                     uint mSold = utxo.Sold - b.minerToken.MiningReward;
                     uint mTOU = utxo.TokenOfUniqueness - 1;
                     OverWriteUTXOAtPointer(b.minerToken.mUTXOP, new UTXO(b.minerToken.MinerPKEY, mSold, mTOU));
@@ -1384,13 +1439,13 @@ namespace firstchain
                     if (a == uint.MaxValue) { break; }
                     Tx TX = b.Data[a];
                     UTXO utxo = GetOfficialUTXOAtPointer(TX.sUTXOP);
-                    if (utxo == null) { FatalErrorHandler(0); return; } // FATAL ERROR
+                    if (utxo == null) { FatalErrorHandler(0, "no utxo found during downgrade utxo set"); return; } // FATAL ERROR
                     utxo = UpdateVirtualUTXO(TX, utxo, true);
                     OverWriteUTXOAtPointer(TX.sUTXOP, utxo);
                     if (TX.rUTXOP != 0)
                     {
                         utxo = GetOfficialUTXOAtPointer(TX.rUTXOP);
-                        if (utxo == null) { FatalErrorHandler(0); return; } // FATAL ERROR
+                        if (utxo == null) { FatalErrorHandler(0, "no utxo found during downgrade utxo set"); return; } // FATAL ERROR
                         utxo = UpdateVirtualUTXO(TX, utxo, true);
                         OverWriteUTXOAtPointer(TX.rUTXOP, utxo);
                     }
@@ -1401,7 +1456,7 @@ namespace firstchain
                 }
              
             }
-            if (!RemoveDust(DustCount)) { FatalErrorHandler(0); return;  } // FATAL ERROR
+            if (!RemoveDust(DustCount)) { FatalErrorHandler(0, "bad dust removing during downgrade utxo set"); return;  } // FATAL ERROR
             OverWriteBytesInFile(0, _folderPath + "utxos", BitConverter.GetBytes(GetCurrencyVolume(index)));
         }
         public static UTXO GetDownGradedVirtualUTXO(uint index, UTXO utxo) //< get a virtual instance of a specific UTXO at specific time of the official chain
@@ -1577,10 +1632,10 @@ namespace firstchain
             while (byteOffset < fl)
             {
                 Tx TX = BytesToTx(GetBytesFromFile(byteOffset, 1100, _folderPath + "ptx"));
-                if ( TX == null) { FatalErrorHandler(0); return; } // FATAL ERROR
+                if ( TX == null) { FatalErrorHandler(0, "no tx found in data during update pending tx file"); return; } // FATAL ERROR
                 foreach(Tx BTX in b.Data)
                 {
-                    if ( BTX == null) { FatalErrorHandler(0); return; } // FATAL ERROR
+                    if ( BTX == null) { FatalErrorHandler(0, "no tx found in builder during update pending tx file"); return; } // FATAL ERROR
                     if (TX.sPKey.SequenceEqual(BTX.sPKey) && TX.TokenOfUniqueness == BTX.TokenOfUniqueness)
                     {
                         // flip bytes then truncate
@@ -1609,7 +1664,7 @@ namespace firstchain
                 for (uint i = firstIndex; i < latestIndex + 1; i++)
                 {
                     Block b = GetBlockAtIndexInFile(i, s);
-                    if (b == null) { FatalErrorHandler(0); return; } // FATAL ERROR
+                    if (b == null) { FatalErrorHandler(0, "no block found during cleaning old pending tx file"); return; } // FATAL ERROR
                     foreach (Tx TX in b.Data)
                     {
                         if (TX.LockTime < unixTimestamp && !forkdel.Contains(s))
@@ -1631,7 +1686,7 @@ namespace firstchain
                 while (byteOffset < fl)
                 {
                     Tx TX = BytesToTx(GetBytesFromFile(byteOffset, 1100, _folderPath + "ptx"));
-                    if ( TX == null) { FatalErrorHandler(0); return; } // FATAL ERROR
+                    if ( TX == null) { FatalErrorHandler(0, "no tx found in data during cleaning pending tx file"); return; } // FATAL ERROR
                     bool _del = false;
                     if (TX.LockTime < unixTimestamp) { _del = true; }
                     if ( _del)
@@ -1650,7 +1705,7 @@ namespace firstchain
                 }
             }
         }
-        public static void ProccessTempTXforPending(string _filePath)
+        public static void ProccessTempTXforPending(string _filePath, bool needPropagate)
         {
             // we first check if length can be divide by 1100 .. 
             FileInfo f = new FileInfo(_filePath);
@@ -1687,11 +1742,14 @@ namespace firstchain
 
                 }
             }
-           
+           if ( needPropagate)
+            {
+                BroadcastQueue.Add(new BroadcastInfo(1, 2, _folderPath + "ptx"));
+            }
            File.Delete(_filePath);
         }
         
-        public static void ProccessTempBlocks(string _filePath) // MAIN FUNCTION TO VALID BLOCK
+        public static void ProccessTempBlocks(string _filePath, bool needPropagate) // MAIN FUNCTION TO VALID BLOCK
         {
             FileInfo f = new FileInfo(_filePath);
             if (f.Length < 8) { File.Delete(_filePath); return; }
@@ -1699,11 +1757,12 @@ namespace firstchain
 
             uint firstTempIndex = BitConverter.ToUInt32(GetBytesFromFile(4, 8, _filePath), 0);
             uint latestTempIndex = BitConverter.ToUInt32(GetBytesFromFile(0, 4, _filePath), 0);
-         
+            Console.WriteLine(firstTempIndex + " " + latestTempIndex);
             uint latestOfficialIndex = RequestLatestBlockIndex(true);
             
             bool HardFork = false;
-            if ( firstTempIndex <= latestOfficialIndex - MAX_RETROGRADE) // A FORK CAN BE UP TO 8 MB.
+            Console.WriteLine((int)(latestOfficialIndex - MAX_RETROGRADE));
+            if ( (int)firstTempIndex <= (int)(latestOfficialIndex - MAX_RETROGRADE)) // create a uint max value error ! 
             {
                 if (firstTempIndex == 0) { Console.WriteLine("NO GENESIS ALLOWED !"); File.Delete(_filePath); return; }
                 if (latestTempIndex < latestOfficialIndex + WINNING_RUN_DISTANCE) { Console.WriteLine("NOT WINNING DIST"); File.Delete(_filePath); return; }
@@ -1775,7 +1834,7 @@ namespace firstchain
                     {
                         DownGradeUTXOSet(firstTempIndex-1);
                         DowngradeOfficialChain(firstTempIndex-1);
-                        AddBlocksToOfficialChain(_filePath);
+                        AddBlocksToOfficialChain(_filePath, needPropagate);
                         string[] forkfiles = Directory.GetFiles(_folderPath + "fork");
                         foreach (string s in forkfiles)
                         {
@@ -1827,14 +1886,16 @@ namespace firstchain
                 // [1] we need to check if first temp index is lower than our highest forks index forks OR if first temp index is equal to latestOfficialIndex + 1
                 // [2] we need to find if 
                 Block currentBlockReading = GetBlockAtIndexInFile(firstTempIndex, _filePath); // we get like latesttempindex -> 2 
-                if (currentBlockReading == null) { File.Delete(_filePath); Console.WriteLine("wrong index specified"); return; }
+                if (currentBlockReading == null) { File.Delete(_filePath); Console.WriteLine("wrong index specified 1"); return; }
 
                 string[] forkfiles = Directory.GetFiles(_folderPath + "fork");
                 uint latestIndex = RequestLatestBlockIndex(false);
                // 
-                string _pathToGetPreviousBlock = "";
-                if ( firstTempIndex != latestOfficialIndex + 1)
+                string _pathToGetPreviousBlock = ""; 
+                if ( firstTempIndex != latestOfficialIndex + 1) // searching A fork : if firsttempindex(1) is not latestofficialindex  (0) + 1
                 {
+
+                    Console.WriteLine("called");
                     latestIndex = RequestLatestBlockIndex(false);
                     if ( latestIndex > firstTempIndex - 1)
                     {
@@ -1843,7 +1904,6 @@ namespace firstchain
                         {
                             File.Delete(_filePath); Console.WriteLine("[1]Can't find a fork to process those blocks. temp index : " + firstTempIndex); return;
                         }
-                        
                     }
                     else
                     {
@@ -1858,11 +1918,13 @@ namespace firstchain
                 }
                 else
                 {
-                    _pathToGetPreviousBlock = GetLatestBlockChainFilePath();
+                    //_pathToGetPreviousBlock = GetLatestBlockChainFilePath(); // this is shit ... 
+                    _pathToGetPreviousBlock = GetIndexBlockChainFilePath(firstTempIndex - 1);
                 }
+                Console.WriteLine(_pathToGetPreviousBlock);
                 Block previousBlock = GetBlockAtIndexInFile(firstTempIndex - 1, _pathToGetPreviousBlock);
 
-                if ( previousBlock == null) { File.Delete(_filePath); Console.WriteLine("wrong index specified"); return; }
+                if ( previousBlock == null) { File.Delete(_filePath); Console.WriteLine("wrong index specified 2"); return; }
               
                 List<uint> timestamps = new List<uint>();
                 uint TC = 0;
@@ -2029,9 +2091,9 @@ namespace firstchain
                             File.Move(_filePath, newPath);
                             Console.WriteLine("new fork added");
                             UpdatePendingTXFileB(newPath);
-                            VerifyRunState();
+                            VerifyRunState(needPropagate);
                             // we should verify if newpath exist. if it is existing we broadcast it
-                            if (File.Exists(newPath))
+                            if (File.Exists(newPath) && needPropagate)
                             {
                                 BroadcastQueue.Add(new BroadcastInfo(1, 1, newPath));
                             }
@@ -2041,9 +2103,9 @@ namespace firstchain
                         {
                             // we will need to concatenate those two forks... to write a new one ... 
                             string newForkPath = ConcatenateForks(_pathToGetPreviousBlock, _filePath, firstTempIndex);
-                            VerifyRunState();
+                            VerifyRunState(needPropagate);
                             // we should verify if newpath exist. if it is existing we broadcast it
-                            if (File.Exists(newForkPath))
+                            if (File.Exists(newForkPath) && needPropagate)
                             {
                                 BroadcastQueue.Add(new BroadcastInfo(1, 1, newForkPath));
                             }
@@ -2054,7 +2116,7 @@ namespace firstchain
                     }
                     previousBlock = currentBlockReading; //*
                     currentBlockReading = GetBlockAtIndexInFile(currentBlockReading.Index + 1, _filePath); //*
-                    if (currentBlockReading == null) { File.Delete(_filePath); Console.WriteLine("wrong index specified"); return; }
+                    if (currentBlockReading == null) { File.Delete(_filePath); Console.WriteLine("wrong index specified 3"); return; }
                     
                     timestamps.RemoveAt(0);
                     timestamps.Add(previousBlock.TimeStamp);
@@ -2139,7 +2201,7 @@ namespace firstchain
             }
             return false;
         }
-        public static void VerifyRunState() // < this will checking fork win then Upgrade the chain! 
+        public static void VerifyRunState(bool needPropagate) // < this will checking fork win then Upgrade the chain! 
         {
             Console.WriteLine("winning dist" + WINNING_RUN_DISTANCE);
             string[] forkfiles = Directory.GetFiles(_folderPath + "fork");
@@ -2156,7 +2218,7 @@ namespace firstchain
                         DowngradeOfficialChain(firstTempIndex-1);
                         DownGradeUTXOSet(firstTempIndex-1);
                     }
-                    AddBlocksToOfficialChain(s);
+                    AddBlocksToOfficialChain(s, needPropagate);
                     _found = true;
                     // clear all forks
                    // Console.WriteLine("called a");
@@ -2334,7 +2396,7 @@ namespace firstchain
             for (uint i = endIndex; i < LastIndex +  1; i++)
             {
                 Block b = GetBlockAtIndexInFile(i, _path2);
-                if (b == null) { File.Delete(_path2); FatalErrorHandler(0); return ""; } // FATAL ERROR
+                if (b == null) { File.Delete(_path2); FatalErrorHandler(0, "no block found in data during concatening forks file"); return ""; } // FATAL ERROR
                 byte[] bytes = BlockToBytes(b);
                 AppendBytesToFile(newForkPath, bytes);
                 UpdatePendingTXFile(b);
@@ -2350,7 +2412,7 @@ namespace firstchain
             for (uint i = pointer+1; i < latestIndex + 1; i ++)
             {
                 Block b = GetBlockAtIndex(i);
-                if (b == null) { FatalErrorHandler(0); return; } // FATAL ERROR
+                if (b == null) { FatalErrorHandler(0, "no block found in data during downgrading chain"); return; } // FATAL ERROR
                 bytelength += BlockToBytes(b).Length;
             }
             // we know the exact length of bytes we have to truncate.... we can use this value to erase blockchain part
@@ -2374,7 +2436,7 @@ namespace firstchain
             OverWriteBytesInFile(0, GetLatestBlockChainFilePath(), BitConverter.GetBytes(pointer));
             Console.WriteLine("Blockchain Downgraded at " + pointer);
         }
-        public static void AddBlocksToOfficialChain(string filePath)
+        public static void AddBlocksToOfficialChain(string filePath, bool needPropagate)
         {
             // GET THE LATEST BLOCKCHAIN FILE PATH.->
             string blockchainPath = GetLatestBlockChainFilePath();
@@ -2385,7 +2447,7 @@ namespace firstchain
             for (uint i = firstTempIndex; i < latestTempIndex + 1; i++)
             {
                 Block b = GetBlockAtIndexInFile(i, filePath);
-                if (b == null) { FatalErrorHandler(0); return; } // FATAL ERROR
+                if (b == null) { FatalErrorHandler(0, "no block found in data during updating official chain"); return; } // FATAL ERROR
                 PrintBlockData(b);
                 byte[] bytes = BlockToBytes(b);
                 FileInfo f = new FileInfo(blockchainPath);
@@ -2403,7 +2465,10 @@ namespace firstchain
                 UpgradeUTXOSet(b);
                 UpdatePendingTXFile(b);
             }
-            BroadcastQueue.Add(new BroadcastInfo(2, 1));
+            if ( needPropagate)
+            {
+                   BroadcastQueue.Add(new BroadcastInfo(2, 1));
+            }
             Console.WriteLine("Blockchain updated!");
             //arduino.SendTick("1");
 
