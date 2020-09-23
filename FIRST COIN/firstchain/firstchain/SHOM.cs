@@ -79,7 +79,7 @@ namespace firstchain
                 if (sLine != null)
                     dtreceived = sLine;
             }
-            Console.WriteLine(dtreceived);
+            
             // ----------------------------------------> GET LAST DATA
 
        
@@ -112,7 +112,7 @@ namespace firstchain
             }
             else
             {
-                Console.WriteLine("no data found!");
+                Console.WriteLine("water never between those value today :!");
             }
        
         }
