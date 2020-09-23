@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -146,7 +146,8 @@ namespace firstchain
 
         //--------------------------------------- THE SEA IN THE CONSENSUS --------------------------------------------
         public static float SEA_MINLEVEL = 0.1f;
-        public static float SEA_MAXLEVEL = 10f; 
+        public static float SEA_MAXLEVEL = 10f;
+        public static float SEA_FORCE = 1f;
 
         static void Main(string[] args)
         {
@@ -2322,7 +2323,7 @@ namespace firstchain
             float currentwaterlevel = shom.value;
             float midpoint = (SEA_MAXLEVEL + SEA_MINLEVEL) / 2;
             float prct = currentwaterlevel / midpoint;
-
+            prct = (float)Math.Pow(prct, SEA_FORCE);
             // multiply per the difference from mid point 
 
             BigInteger b1 = BytesToUint256(Current_Target);
