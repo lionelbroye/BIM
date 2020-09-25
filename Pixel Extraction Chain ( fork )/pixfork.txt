@@ -1,0 +1,37 @@
+	    
+_______________________________________________________________
+                  [1]Revoir la structure des blocs
+
+[ ]BytesToBlock
+[ ]BlockToBytes
+[ ]GetBlockAtIndex              ( revoir la structure des blocs )
+[ ]GetBlockPointerAtIndex       ( revoir la structure des blocs )
+[ ]GetBlockAtIndexInFile        ( revoir la structure des blocs )
+
+_______________________________________________________________
+                  [2]Voir toutes les methodes 
+	  de virtualisation d'Unexcavated Pixel Output
+		  [3]Voir la Upgrading et le downgrading
+			de l'annuaire de pixel.
+
+_______________________________________________________________
+		        Methode à Revoir
+[*]VerifyTransactionDataSignature 
+[ ]MineBlock
+
+_______________________________________________________________
+		Methode à Supprimer(pour le moment)
+[ ]CreateTxFile
+[ ]SetUpTx
+
+
+_______________________________________________________________
+	methode pour la validation d'une transaction de pixel
+
+isPixExtractPointerValid()
+	--- check if hpkey exist in pixel database
+        	---- check if app is correct
+GetPixExtractAmount()
+        --- get all pixels in extraction zone
+	--- sum all value of those pixels
+	--- return the value
