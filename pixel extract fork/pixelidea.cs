@@ -64,7 +64,7 @@ namespace firstchain
         }
 
         /*
-         *  En admettant que le monochrome est de taille 50x50 pix alors 2500 pixels serait en circulation sur le marché. 
+         *  En admettant que le monochrome est de taille 50x50 pix alors 2500 pixels serait en circulation dans la chaine de bloc. 
          *  
         ----------------------------------STRUCTURE DE L'ANNUAIRE DES PIXELS -----------------------------------
         hash clé publique (32 octets) 
