@@ -15,12 +15,6 @@ namespace firstchain
     
     class Program
     {
-        /*
-          verify every proccess mode working ( without tx )
-                > Sending Mode : BroadcastFile (can be tx or a block file) or BroadcastBlockchain ( send specific block... )
-
-
-         */
         public class Block
         {
             public uint Index { get; } // 4 o
