@@ -104,49 +104,7 @@ namespace firstchain
 
         public static uint CURRENT_UPOS_SIZE = 0;
 
-        /*
-            public static Block GetBlockAtIndex(uint pointer) //< --- return a specific block at index. Fork NOT Included! Return a null Block if CANT BE BE FOUND
-        {
 
-            string[] files = Directory.GetFiles(_folderPath + "blockchain");
-            List<uint> flist = new List<uint>();
-            foreach (string s in files) { flist.Add(Convert.ToUInt32(Path.GetFileName(s))); }
-            flist.Sort();
-
-            string filePath = "";
-            foreach (uint a in flist)
-            {
-                uint lastIndex = RequestLatestBlockIndexInFile(_folderPath + "blockchain\\" + a.ToString());
-                if (lastIndex >= pointer)
-                {
-                    filePath = _folderPath + "blockchain\\" + a.ToString();
-                    break;
-                }
-            }
-            if (filePath.Length == 0) { return null; }
-            uint byteOffset = 4;
-            uint fileLength = (uint)new FileInfo(filePath).Length;
-            if (fileLength < 76) { return null; }
-            while (true)
-            {
-                if (BitConverter.ToUInt32(GetBytesFromFile(byteOffset, 4, filePath), 0) == pointer)
-                {
-                    byteOffset += 68;
-                    uint dsb = BitConverter.ToUInt32(GetBytesFromFile(byteOffset, 4, filePath), 0);
-                    byteOffset -= 68;
-                    if (fileLength < byteOffset + 72 + (dsb * 1100) + 80) { return null; }
-                    return BytesToBlock(GetBytesFromFile(byteOffset, 72 + (dsb * 1100) + 80, filePath));
-                }
-                byteOffset += 68;
-                uint ds = BitConverter.ToUInt32(GetBytesFromFile(byteOffset, 4, filePath), 0);
-                byteOffset -= 68;
-                byteOffset += 72 + (ds * 1100) + 80;
-                if (fileLength < byteOffset + 72) { return null; }
-            }
-
-        }
-         */
-    
         public static Pixel BytesToPixel(byte[] bytes)
         {
             if (bytes.Length != 20) { return null; }
@@ -198,14 +156,6 @@ namespace firstchain
             return Program.ListToByteArray(Databuilder);
         }
 
-        /*
-            public byte[] HashKey { get; } //32 o
-            public uint TokenOfUniqueness { get; } // 4 o 
-            public uint Sold { get; } // 4 o 
-            public uint pixelsSize { get;  } // 4o 
-            public List<Pixel> Pixels { get; } // * 20 octets par Pixel
- 
-         */
         public static UPO BytesToUPO(byte[] bytes)
         {
             byte[] HashKey = new byte[32];
