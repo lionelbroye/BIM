@@ -96,7 +96,7 @@ namespace firstchain
         2
         10
         1
-        *< mon pc c'est que l'information de cette clé publique se termine ici grace au 2 plus haut. 2 = lire 2*20 octets...
+        *< mon pc sait que l'information de cette clé publique se termine ici grace au 2 plus haut. 2 = lire 2*20 octets...
 
 
         */
