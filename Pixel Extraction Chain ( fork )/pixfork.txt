@@ -15,12 +15,12 @@ _______________________________________________________________
 			de l'annuaire de pixel.
 
 _______________________________________________________________
-		        Methode à Revoir
+		        Methode Ã  Revoir
 [*]VerifyTransactionDataSignature 
 [ ]MineBlock
 
 _______________________________________________________________
-		Methode à Supprimer(pour le moment)
+		Methode Ã  Supprimer(pour le moment)
 [ ]CreateTxFile
 [ ]SetUpTx
 
@@ -33,5 +33,5 @@ isPixExtractPointerValid()
         	---- check if app is correct
 GetPixExtractAmount()
         --- get all pixels in extraction zone
-	--- sum all value of those pixels
+	--- sum all value of those pixels with equation
 	--- return the value
