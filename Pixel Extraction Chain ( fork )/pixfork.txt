@@ -1,17 +1,8 @@
 	    
 _______________________________________________________________
-                  [1]Revoir la structure des blocs
-
-[ ]BytesToBlock
-[ ]BlockToBytes
-[ ]GetBlockAtIndex              ( revoir la structure des blocs )
-[ ]GetBlockPointerAtIndex       ( revoir la structure des blocs )
-[ ]GetBlockAtIndexInFile        ( revoir la structure des blocs )
-
-_______________________________________________________________
-                  [2]Voir toutes les methodes 
+                  [1]Voir toutes les methodes 
 	  de virtualisation d'Unexcavated Pixel Output
-		  [3]Voir la Upgrading et le downgrading
+		  [2]Voir la Upgrading et le downgrading
 			de l'annuaire de pixel.
 
 _______________________________________________________________
