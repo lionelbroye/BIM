@@ -139,10 +139,11 @@ namespace firstchain
         public static List<Tuple<bool,string>> PendingBlockFiles = new List<Tuple<bool, string>>(); 
         public static List<Tuple<bool, string>> PendingPTXFiles = new List<Tuple<bool, string>>();
         public static uint BROADCAST_BLOCKS_LIMIT = 30; // MAX NUMBER OF BLOCK I WANT TO BROADCAST WHEN UPLOADING MY BC. IF 0. BROADCAST THE FULL. 
-        public static uint BROADCAST_FULL_BLOCKCHAIN_CLOCK = 1; // I SHOULD BROADCAST THE FULL EVERY HOUR... like SET A CLOCK HERE ( minute ) // should be 60 
+        public static uint BROADCAST_FULL_BLOCKCHAIN_CLOCK = 30; // I SHOULD BROADCAST THE FULL EVERY HOUR... like SET A CLOCK HERE ( minute ) // should be 60 
         public static uint LATEST_FBROADCAST_TICK = 0;
         public static List<BroadcastInfo> BroadcastQueue = new List<BroadcastInfo>();
-
+        public static List<string> peerRemovalQueue = new List<string>();
+        public static List<uint> dlRemovalQueue = new List<uint>(); 
         static void Main(string[] args)
         {
            
@@ -161,6 +162,7 @@ namespace firstchain
                 for ( int i = PendingDLBlocks.Count-1; i >= 0; i --)
                 {
                     PendingBlockFiles.Add(new Tuple<bool,string>(false,ConcatenateDL(PendingDLBlocks[i])));
+                    Console.WriteLine(" we added " + PendingBlockFiles[PendingBlockFiles.Count - 1].Item2); 
                     PendingDLBlocks.RemoveAt(i);
                 }
                 for (int i = PendingDLTXs.Count - 1; i >= 0; i--)
@@ -168,10 +170,14 @@ namespace firstchain
                    PendingPTXFiles.Add(new Tuple<bool, string>(false, ConcatenateDL(PendingDLTXs[i])));
                    PendingDLTXs.RemoveAt(i);
                 }
-                for (int i = PendingBlockFiles.Count - 1; i >= 0; i--)
+                for (int i = PendingBlockFiles.Count - 1; i >= 0; i--) // un bloc est relancé deux fois ... 
                 {
+                    foreach(Tuple<bool,string> pp in PendingBlockFiles)
+                    {
+                        Console.WriteLine(pp.Item2); 
+                    }
                     ProccessTempBlocks(PendingBlockFiles[i].Item2, PendingBlockFiles[i].Item1); 
-                    PendingBlockFiles.RemoveAt(i);
+                    PendingBlockFiles.RemoveAt(i); // 
                 }
                 for (int i = PendingPTXFiles.Count - 1; i >= 0; i--)
                 {
@@ -180,8 +186,47 @@ namespace firstchain
                 }
                 if ( PendingBlockFiles.Count == 0 && PendingPTXFiles.Count == 0 && BroadcastQueue.Count > 0 ) 
                 {
+                    // clean files containing pID in dll folder...
+                    foreach ( uint s in dlRemovalQueue)
+                    {
+                        string[] files = Directory.GetFiles(Program._folderPath + "net");
+                        foreach (string f in files)
+                        {
+                            if (f.Contains(s.ToString()))
+                            {
+                                File.Delete(f);
+                            }
+                        }
+                        Console.WriteLine("will delete files with " + s.ToString());
+                    }
+                    dlRemovalQueue = new List<uint>();
+
                     if ( NT != null)
                     {
+
+                        // first remove the extendedpeer if need to be cleaned ...  
+                        for (int n = peerRemovalQueue.Count - 1; n >= 0; n--)
+                        {
+                            string ip = peerRemovalQueue[n]; 
+                            for (int i = NT.mPeers.Count - 1; i >= 0 ; i--  )
+                            {
+                                if (NT.mPeers[i].IP == ip)
+                                {
+                                    NT.mPeers[i].Peer.Close();
+                                    string _ip = NT.mPeers[i].IP;
+                                    Int32 Port = 13000; //....
+                                    NT.mPeers.RemoveAt(i);
+                                    new Thread(() =>
+                                    {
+                                        Thread.CurrentThread.IsBackground = true;
+                                        NT.Connect(ip, Port);
+                                    }).Start();
+                                    Console.WriteLine("peers " + _ip  + " removed due to inactivity!");
+                                    peerRemovalQueue.RemoveAt(n); 
+                                    break; 
+                                }
+                            }
+                        }
                         bool _cS = false;
                         foreach( network.ExtendedPeer ex in NT.mPeers)
                         {
@@ -201,6 +246,12 @@ namespace firstchain
                         }
                   
                     }
+                    else
+                    {
+                        PendingBlockFiles = new List<Tuple<bool, string>>();
+                        PendingPTXFiles = new List<Tuple<bool, string>>();
+                        BroadcastQueue = new List<BroadcastInfo>(); 
+                    }
                 }
             }
            
@@ -216,7 +267,12 @@ namespace firstchain
             {
                 
                 if (s.Contains(_path)){
-                    flist.Add(Convert.ToUInt32(s.Replace(_path+"_","")));
+                    uint result; 
+                    if ( uint.TryParse(s.Replace(_path + "_", ""), out result))
+                    {
+                        flist.Add(Convert.ToUInt32(s.Replace(_path + "_", "")));
+                    }
+                    
                 }
             }
             flist.Sort();
@@ -283,15 +339,13 @@ namespace firstchain
                 if ( argument.Contains("rqshom"))
                 {
                     string s = argument.Replace("rqshom", "");
-
                     s = s.Replace(" ", "");
                     int index = 0;
                     if ( int.TryParse(s, out index) )
                     {
-                        DateTime today = DateTime.Now; //new DateTime(dateStart.Year, dateStart.Month, dateStart.Day, 11, 15, 0);
-                        DateTime amodif = new DateTime(2020, 09, 23, 14, 58, 20); // annee,mois,jour,heure,minute,seconde
+                        DateTime today = DateTime.Now;
                         DateTime tomorrow = today.AddDays(1);
-                        SHOM.GetSHOMData(index, amodif, tomorrow);
+                        SHOM.GetSHOMData(index, today, tomorrow);
                         argumentFound = true;
                     }
                     else
@@ -566,11 +620,15 @@ namespace firstchain
                                     {
                                         Console.WriteLine("mining in finito");
                                         // wait that pendingblockfiles are empty and broadcast is empty
-                                        while ( PendingBlockFiles.Count != 0 || BroadcastQueue.Count != 0) {
-                                            Console.WriteLine(PendingBlockFiles.Count + " " + BroadcastQueue.Count);
-                                            Thread.Sleep(500);
-                                        } 
-                                        StartMining(pkeyHASH, utxopointer, mnlock, 1);
+                                        if ( NT != null)
+                                        {
+                                            while (PendingBlockFiles.Count != 0 || BroadcastQueue.Count != 0)
+                                            {
+                                                Console.WriteLine(PendingBlockFiles.Count + " " + BroadcastQueue.Count);
+                                                Thread.Sleep(500);
+                                            }
+                                        }
+                                       StartMining(pkeyHASH, utxopointer, mnlock, 1);
                                         PendingBlockFiles.Add(new Tuple<bool,string>(true,_folderPath + "winblock"));
                                     }
                                 }
@@ -1751,8 +1809,9 @@ namespace firstchain
         
         public static void ProccessTempBlocks(string _filePath, bool needPropagate) // MAIN FUNCTION TO VALID BLOCK
         {
+            Console.WriteLine("STARTING PROCESSING BLOCKS FOR " + _filePath);
             FileInfo f = new FileInfo(_filePath);
-            if (f.Length < 8) { File.Delete(_filePath); return; }
+            if (f.Length < 8) {   File.Delete(_filePath); return; }
             if (!isHeaderCorrectInBlockFile(_filePath)) { Console.WriteLine("header incorrect!"); File.Delete(_filePath); return; }
 
             uint firstTempIndex = BitConverter.ToUInt32(GetBytesFromFile(4, 8, _filePath), 0);
@@ -1835,12 +1894,6 @@ namespace firstchain
                         DownGradeUTXOSet(firstTempIndex-1);
                         DowngradeOfficialChain(firstTempIndex-1);
                         AddBlocksToOfficialChain(_filePath, needPropagate);
-                        string[] forkfiles = Directory.GetFiles(_folderPath + "fork");
-                        foreach (string s in forkfiles)
-                        {
-                            File.Delete(s);
-                        }
-                        File.Delete(_filePath);
                         return;
                     }
                     previousBlock = currentBlockReading; //*
@@ -2401,8 +2454,9 @@ namespace firstchain
                 AppendBytesToFile(newForkPath, bytes);
                 UpdatePendingTXFile(b);
             }
-            OverWriteBytesInFile(0, newForkPath, BitConverter.GetBytes(LastIndex)); 
-            File.Delete(_path2);
+            OverWriteBytesInFile(0, newForkPath, BitConverter.GetBytes(LastIndex));
+            Console.WriteLine("will delete " + _path2); 
+             File.Delete(_path2);
             return newForkPath;
         }
         public static void DowngradeOfficialChain(uint pointer) //< downgrade blockchain to specific length ( block#pointer not included!)
@@ -2469,6 +2523,13 @@ namespace firstchain
             {
                    BroadcastQueue.Add(new BroadcastInfo(2, 1));
             }
+            string[] forkfiles = Directory.GetFiles(_folderPath + "fork");
+            foreach (string s in forkfiles)
+            {
+                File.Delete(s);
+            }
+            Console.WriteLine("will delete " + filePath);
+            File.Delete(filePath); 
             Console.WriteLine("Blockchain updated!");
             //arduino.SendTick("1");
 
@@ -2826,7 +2887,7 @@ namespace firstchain
 
             byte[] sha = ComputeSHA256(ListToByteArray(dataBuilder));
             sha = ComputeSHA256(sha); //< double hash function to avoid collision or anniversary attack 
-            uint nonce = 0;
+            uint nonce = 0; // on va dire que c'est un random uint entre 0 et uint.maxvalue
             while (true)
             {
                 List<byte> Databuilder = new List<byte>();
@@ -2887,6 +2948,7 @@ namespace firstchain
         public static Block GetBlockAtIndexInFile(uint pointer, string filePath) // Return a null Block if CANT BE BE FOUND
         {
             uint byteOffset = 4;
+           // Console.WriteLine("want to get " + filePath);
             uint fileLength = (uint)new FileInfo(filePath).Length;
             if (fileLength < 76) { return null; }
             while (true) 
