@@ -1,0 +1,7 @@
+createwallet
+mine pkey:"location\publicKey" utxop:0 minlock:10000 ntime:10
+getupoindex pkey:"location\publicKey"
+mine pkey:"location\publicKey" utxop:1 minlock:10000 ntime:10
+
+now you have some coin to start drawing. use drawprogram.exe to paint inside 
+future block of blockchain
