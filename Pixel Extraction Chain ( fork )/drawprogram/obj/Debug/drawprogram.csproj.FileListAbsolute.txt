@@ -1,0 +1,10 @@
+C:\Users\Gaël\source\repos\drawprogram\drawprogram\bin\Debug\drawprogram.exe.config
+C:\Users\Gaël\source\repos\drawprogram\drawprogram\bin\Debug\drawprogram.exe
+C:\Users\Gaël\source\repos\drawprogram\drawprogram\bin\Debug\drawprogram.pdb
+C:\Users\Gaël\source\repos\drawprogram\drawprogram\obj\Debug\drawprogram.csprojAssemblyReference.cache
+C:\Users\Gaël\source\repos\drawprogram\drawprogram\obj\Debug\drawprogram.Properties.Resources.resources
+C:\Users\Gaël\source\repos\drawprogram\drawprogram\obj\Debug\drawprogram.csproj.GenerateResource.cache
+C:\Users\Gaël\source\repos\drawprogram\drawprogram\obj\Debug\drawprogram.csproj.CoreCompileInputs.cache
+C:\Users\Gaël\source\repos\drawprogram\drawprogram\obj\Debug\drawprogram.exe
+C:\Users\Gaël\source\repos\drawprogram\drawprogram\obj\Debug\drawprogram.pdb
+C:\Users\Gaël\source\repos\drawprogram\drawprogram\obj\Debug\drawprogram.Form1.resources
