@@ -12,7 +12,35 @@ using firstchain.arith256;
 using System.Threading;
 namespace firstchain
 {
-    
+    /*
+     * Gerer les empreintes de fichiers lors de l'upload 
+     * --> produire un ID unique! ex : mon empreinte unix + le nombre d'envoie dans la seconde ( faire un thread qui reset scompteur chaque seconde )
+     * 
+     * Gestion des fichier TX ( inscrire une TX si seulement elle n'existe pas dans notre PTX file . 
+     * 
+     * Test des bonnes receptions de transactions dans le reseau et validation dans les blocs.... 
+     * 
+     * pixel transaction structure d'objet
+     * 
+     * hash de ma clé publique 
+     * pointeur de ma clé publique
+     * token d'unicité
+     * nombre d'extraction
+     * liste d'extraction
+     * frais de transaction
+     * signature ( de tout ce qui precede ) avec ma clé privé
+     * 
+     * extraction de pixel structure d'objet:           --------> (60 octets)
+     * hash de la clé publique du possesseur des pixels --------> (32 octets)
+     * pointeur de sa clé publique                      --------> (4 octets)
+     * zone dextraction [0,0] [1,1] ( 2 vecteurs )      --------> (16 octets) | 4 entiers signé 32bit
+     * offset ( vecteur )                               --------> (8 octets)  | 2 entiers signé 32bit
+     * 
+     * anuaire des pixels structures : 
+     * 
+  
+     * 
+     */
     class Program
     {
         public class Block
@@ -47,14 +75,14 @@ namespace firstchain
             public uint Amount { get; }
             public byte[] rHashKey { get; }
             public uint LockTime { get; }
-            public uint sUTXOP { get; }  
-            public uint rUTXOP { get; } 
+            public uint sUTXOP { get; }
+            public uint rUTXOP { get; }
             public uint TokenOfUniqueness { get; }
             public uint TxFee { get; }
             public byte[] Signature { get; }
-           
-             
-            public Tx (byte[] spk, uint amount, byte[] rpk, uint locktime, uint spkP, uint rpkP, uint TOU, uint Fee, byte[] sign )
+
+
+            public Tx(byte[] spk, uint amount, byte[] rpk, uint locktime, uint spkP, uint rpkP, uint TOU, uint Fee, byte[] sign)
             {
                 this.sPKey = spk;
                 this.Amount = amount;
@@ -112,35 +140,35 @@ namespace firstchain
         public static uint NATIVE_REWARD = 50; // COIN GIVE TO FIRST REWARD_DIVIDER_CLOCKth BLOCK
         public static uint REWARD_DIVIDER_CLOCK = 210000; // NUMBER OF BLOCK BEFORE NATIVE REWARD SHOULD BE HALFED
         public static byte[] MAXIMUM_TARGET = StringToByteArray("00000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"); //< MAX HASH TARGET. MINIMUM DIFFICULTY.
-        //--------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                     //--------------------------------------------------------------------------------------------------------------------------
 
-       //--------------------------------------- BROADCAST INFO --------------------------------------------
-       public class BroadcastInfo
-       {
-            public byte flag { get; } 
+        //--------------------------------------- BROADCAST INFO --------------------------------------------
+        public class BroadcastInfo
+        {
+            public byte flag { get; }
             public string filePath { get; }
-            public byte header { get;  }
-            public BroadcastInfo(byte fl, byte head = 1,  string fp  = "") 
+            public byte header { get; }
+            public BroadcastInfo(byte fl, byte head = 1, string fp = "")
             {
                 this.flag = fl;
                 this.filePath = fp;
                 this.header = head;
             }
-       }
+        }
         public static network NT;
-        public static List<uint> PendingDLBlocks = new List<uint>();
-        public static List<uint> PendingDLTXs = new List<uint>();
-        public static List<Tuple<bool,string>> PendingBlockFiles = new List<Tuple<bool, string>>(); 
+        public static List<string> PendingDLBlocks = new List<string>();
+        public static List<string> PendingDLTXs = new List<string>();
+        public static List<Tuple<bool, string>> PendingBlockFiles = new List<Tuple<bool, string>>();
         public static List<Tuple<bool, string>> PendingPTXFiles = new List<Tuple<bool, string>>();
         public static uint BROADCAST_BLOCKS_LIMIT = 30; // MAX NUMBER OF BLOCK I WANT TO BROADCAST WHEN UPLOADING MY BC. IF 0. BROADCAST THE FULL. 
         public static uint BROADCAST_FULL_BLOCKCHAIN_CLOCK = 30; // I SHOULD BROADCAST THE FULL EVERY HOUR... like SET A CLOCK HERE ( minute ) // should be 60 
         public static uint LATEST_FBROADCAST_TICK = 0;
         public static List<BroadcastInfo> BroadcastQueue = new List<BroadcastInfo>();
         public static List<string> peerRemovalQueue = new List<string>();
-        public static List<uint> dlRemovalQueue = new List<uint>(); 
+        public static List<string> dlRemovalQueue = new List<string>();
         static void Main(string[] args)
         {
-           
+
             //arduino.Initialize();
             CheckFilesAtRoot();
             VerifyFiles();
@@ -151,26 +179,30 @@ namespace firstchain
                 GetInput();
             }).Start();
 
-            while ( true)
+            // here debug
+            uint unixTimestampB = (uint)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalMilliseconds;
+            byte[] checksum = Program.ComputeSHA256(BitConverter.GetBytes(unixTimestampB));
+            Console.WriteLine(_folderPath + SHAToHex(checksum, false));
+            while (true)
             {
-                for ( int i = PendingDLBlocks.Count-1; i >= 0; i --)
+                for (int i = PendingDLBlocks.Count - 1; i >= 0; i--)
                 {
-                    PendingBlockFiles.Add(new Tuple<bool,string>(false,ConcatenateDL(PendingDLBlocks[i])));
-                    Console.WriteLine(" we added " + PendingBlockFiles[PendingBlockFiles.Count - 1].Item2); 
+                    PendingBlockFiles.Add(new Tuple<bool, string>(false, ConcatenateDL(PendingDLBlocks[i])));
+                    Console.WriteLine(" we added " + PendingBlockFiles[PendingBlockFiles.Count - 1].Item2);
                     PendingDLBlocks.RemoveAt(i);
                 }
                 for (int i = PendingDLTXs.Count - 1; i >= 0; i--)
                 {
-                   PendingPTXFiles.Add(new Tuple<bool, string>(false, ConcatenateDL(PendingDLTXs[i])));
-                   PendingDLTXs.RemoveAt(i);
+                    PendingPTXFiles.Add(new Tuple<bool, string>(false, ConcatenateDL(PendingDLTXs[i])));
+                    PendingDLTXs.RemoveAt(i);
                 }
                 for (int i = PendingBlockFiles.Count - 1; i >= 0; i--) // un bloc est relancé deux fois ... 
                 {
-                    foreach(Tuple<bool,string> pp in PendingBlockFiles)
+                    foreach (Tuple<bool, string> pp in PendingBlockFiles)
                     {
-                        Console.WriteLine(pp.Item2); 
+                        Console.WriteLine(pp.Item2);
                     }
-                    ProccessTempBlocks(PendingBlockFiles[i].Item2, PendingBlockFiles[i].Item1); 
+                    ProccessTempBlocks(PendingBlockFiles[i].Item2, PendingBlockFiles[i].Item1);
                     PendingBlockFiles.RemoveAt(i); // 
                 }
                 for (int i = PendingPTXFiles.Count - 1; i >= 0; i--)
@@ -178,10 +210,10 @@ namespace firstchain
                     ProccessTempTXforPending(PendingPTXFiles[i].Item2, PendingPTXFiles[i].Item1);
                     PendingPTXFiles.RemoveAt(i);
                 }
-                if ( PendingBlockFiles.Count == 0 && PendingPTXFiles.Count == 0 && BroadcastQueue.Count > 0 ) 
+                if (PendingBlockFiles.Count == 0 && PendingPTXFiles.Count == 0 && BroadcastQueue.Count > 0)
                 {
                     // clean files containing pID in dll folder...
-                    foreach ( uint s in dlRemovalQueue)
+                    foreach (string s in dlRemovalQueue)
                     {
                         string[] files = Directory.GetFiles(Program._folderPath + "net");
                         foreach (string f in files)
@@ -193,16 +225,16 @@ namespace firstchain
                         }
                         Console.WriteLine("will delete files with " + s.ToString());
                     }
-                    dlRemovalQueue = new List<uint>();
+                    dlRemovalQueue = new List<string>();
 
-                    if ( NT != null)
+                    if (NT != null)
                     {
 
                         // first remove the extendedpeer if need to be cleaned ...  
                         for (int n = peerRemovalQueue.Count - 1; n >= 0; n--)
                         {
-                            string ip = peerRemovalQueue[n]; 
-                            for (int i = NT.mPeers.Count - 1; i >= 0 ; i--  )
+                            string ip = peerRemovalQueue[n];
+                            for (int i = NT.mPeers.Count - 1; i >= 0; i--)
                             {
                                 if (NT.mPeers[i].IP == ip)
                                 {
@@ -215,14 +247,14 @@ namespace firstchain
                                         Thread.CurrentThread.IsBackground = true;
                                         NT.Connect(ip, Port);
                                     }).Start();
-                                    Console.WriteLine("peers " + _ip  + " removed due to inactivity!");
-                                    peerRemovalQueue.RemoveAt(n); 
-                                    break; 
+                                    Console.WriteLine("peers " + _ip + " removed due to inactivity!");
+                                    peerRemovalQueue.RemoveAt(n);
+                                    break;
                                 }
                             }
                         }
                         bool _cS = false;
-                        foreach( network.ExtendedPeer ex in NT.mPeers)
+                        foreach (network.ExtendedPeer ex in NT.mPeers)
                         {
                             if (ex.currentlySending)
                             {
@@ -238,39 +270,40 @@ namespace firstchain
                         {
                             //Console.WriteLine("currently sending");
                         }
-                  
+
                     }
                     else
                     {
                         PendingBlockFiles = new List<Tuple<bool, string>>();
                         PendingPTXFiles = new List<Tuple<bool, string>>();
-                        BroadcastQueue = new List<BroadcastInfo>(); 
+                        BroadcastQueue = new List<BroadcastInfo>();
                     }
                 }
             }
-           
+
 
         }
-        public static string ConcatenateDL(uint index)
+        public static string ConcatenateDL(string index)
         {
             string[] files = Directory.GetFiles(_folderPath + "net");
-            string _path = _folderPath + "net\\" + index.ToString(); 
+            string _path = _folderPath + "net\\" + index.ToString();
             File.WriteAllBytes(_path, new byte[0]); // missing 4 bytes // USE THIS FOR CREATING A FILE! NO FILECREATE SVP! 
             List<uint> flist = new List<uint>();
             foreach (string s in files)
             {
-                
-                if (s.Contains(_path)){
-                    uint result; 
-                    if ( uint.TryParse(s.Replace(_path + "_", ""), out result))
+
+                if (s.Contains(_path))
+                {
+                    uint result;
+                    if (uint.TryParse(s.Replace(_path + "_", ""), out result))
                     {
                         flist.Add(Convert.ToUInt32(s.Replace(_path + "_", "")));
                     }
-                    
+
                 }
             }
             flist.Sort();
-            foreach ( uint i in flist)
+            foreach (uint i in flist)
             {
                 string fPath = _path + "_" + i.ToString();
                 AppendBytesToFile(_path, File.ReadAllBytes(fPath));
@@ -282,60 +315,60 @@ namespace firstchain
         //----------------------- RAW BROADCAST COMMAND     ---------------------
         public static void BroadCast(BroadcastInfo b)
         {
-       
+
             uint unixTimestamp = (uint)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalMinutes; // min ! 
-           
-                switch ( b.flag)
-                {
-                    case 1:
-                        NT.BroadcastFile(b.filePath, b.header);
-                        BroadcastQueue.RemoveAt(0);
-                        break;
-                    case 2:
-                       if ( unixTimestamp > LATEST_FBROADCAST_TICK + BROADCAST_FULL_BLOCKCHAIN_CLOCK)
-                        {
-                            uint latestIndex = RequestLatestBlockIndex(true);
+
+            switch (b.flag)
+            {
+                case 1:
+                    NT.BroadcastFile(b.filePath, b.header);
+                    BroadcastQueue.RemoveAt(0);
+                    break;
+                case 2:
+                    if (unixTimestamp > LATEST_FBROADCAST_TICK + BROADCAST_FULL_BLOCKCHAIN_CLOCK)
+                    {
+                        uint latestIndex = RequestLatestBlockIndex(true);
                         Console.WriteLine("broadcast = " + latestIndex);
-                            NT.BroadcastBlockchain(1, latestIndex);
-                            BroadcastQueue = new List<BroadcastInfo>(); 
-                            LATEST_FBROADCAST_TICK = unixTimestamp;
-                        }
-                        else
-                        {
-                            uint latestIndex = RequestLatestBlockIndex(true);
-                            int startI = (int)(latestIndex - BROADCAST_BLOCKS_LIMIT);
+                        NT.BroadcastBlockchain(1, latestIndex);
+                        BroadcastQueue = new List<BroadcastInfo>();
+                        LATEST_FBROADCAST_TICK = unixTimestamp;
+                    }
+                    else
+                    {
+                        uint latestIndex = RequestLatestBlockIndex(true);
+                        int startI = (int)(latestIndex - BROADCAST_BLOCKS_LIMIT);
                         Console.WriteLine("broadcast = " + latestIndex);
                         if (startI < 1) { startI = 1; ; }
-                            NT.BroadcastBlockchain((uint)startI, latestIndex);
-                            BroadcastQueue.RemoveAt(0);
+                        NT.BroadcastBlockchain((uint)startI, latestIndex);
+                        BroadcastQueue.RemoveAt(0);
 
-                        }
-                        break; 
-                }
-           
-            
+                    }
+                    break;
+            }
+
+
 
 
         }
         //----------------------- COMMAND     ---------------------
         public static void GetInput()
         {
-           
-            while ( true)
+
+            while (true)
             {
                 bool argumentFound = false;
                 string argument = Console.ReadLine();
-                if ( argument == "getbcinfo")
+                if (argument == "getbcinfo")
                 {
                     PrintChainInfo();
                     argumentFound = true;
                 }
-                if ( argument.Contains("rqshom"))
+                if (argument.Contains("rqshom"))
                 {
                     string s = argument.Replace("rqshom", "");
                     s = s.Replace(" ", "");
                     int index = 0;
-                    if ( int.TryParse(s, out index) )
+                    if (int.TryParse(s, out index))
                     {
                         DateTime today = DateTime.Now;
                         DateTime tomorrow = today.AddDays(1);
@@ -355,7 +388,7 @@ namespace firstchain
                     string fbcArgs = GetStringAfterArgs(argument, "fbc:");
                     uint max = 0;
                     uint fbc = 0;
-                    if ( uint.TryParse(maxArgs, out max))
+                    if (uint.TryParse(maxArgs, out max))
                     {
                         BROADCAST_BLOCKS_LIMIT = max;
                         Console.WriteLine("new broadcast blocks max limit : " + BROADCAST_BLOCKS_LIMIT);
@@ -367,7 +400,7 @@ namespace firstchain
                     }
                     argumentFound = true;
                 }
-                if ( argument == "netconnect")
+                if (argument == "netconnect")
                 {
                     uint unixTimestamp = (uint)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalMinutes;
                     LATEST_FBROADCAST_TICK = unixTimestamp;
@@ -375,9 +408,9 @@ namespace firstchain
                     NT.Initialize();
                     argumentFound = true;
                 }
-                if ( argument == "nettest 1")
+                if (argument == "nettest 1")
                 {
-                    if ( NT != null)
+                    if (NT != null)
                     {
                         NT.BroadcastFile(GetLatestBlockChainFilePath(), 1);
                     }
@@ -427,20 +460,45 @@ namespace firstchain
                     {
                         Console.WriteLine("You're offline. Please use netconnect to get online. ");
                     }
-            
+
                     argumentFound = true;
                 }
-
+                if (argument.Contains("readblockascii"))
+                {
+                    string s = argument.Replace("readblockascii", "");
+                    s = s.Replace(" ", "");
+                    uint index = 0;
+                    bool success = uint.TryParse(s, out index);
+                    if (success)
+                    {
+                        Block b = GetBlockAtIndex(index);
+                        if (b == null)
+                        {
+                            Console.WriteLine("Block can't be found.");
+                        }
+                        else
+                        {
+                            Console.WriteLine("[  block data  ]");
+                            PrintBlockInASCII(b);
+                        }
+                        argumentFound = true;
+                    }
+                    else
+                    {
+                        Console.WriteLine("invalid argument");
+                    }
+                    argumentFound = true;
+                }
                 if (argument.Contains("getblockinfo"))
                 {
                     string s = argument.Replace("getblockinfo", "");
                     s = s.Replace(" ", "");
                     uint index = 0;
                     bool success = uint.TryParse(s, out index);
-                    if ( success)
+                    if (success)
                     {
                         Block b = GetBlockAtIndex(index);
-                        if ( b == null)
+                        if (b == null)
                         {
                             Console.WriteLine("Block can't be found.");
                         }
@@ -457,7 +515,7 @@ namespace firstchain
                     }
                     argumentFound = true;
                 }
-                if ( argument == "createwallet")
+                if (argument == "createwallet")
                 {
                     GenerateNewPairKey();
                     argumentFound = true;
@@ -471,7 +529,7 @@ namespace firstchain
                     if (success)
                     {
                         UTXO utxo = GetOfficialUTXOAtPointer(index);
-                        if ( utxo == null)
+                        if (utxo == null)
                         {
                             Console.WriteLine("UTXO of this public Key not existing in UTXO Set ");
                         }
@@ -488,8 +546,9 @@ namespace firstchain
                 {
                     string path = argument.Replace("location", AppDomain.CurrentDomain.BaseDirectory);
                     path = getfilePath(path.ToCharArray());
-                    if ( path.Length == 0) { Console.WriteLine("invalid argument. Please set path of your public key file in quote. "); }
-                    else {
+                    if (path.Length == 0) { Console.WriteLine("invalid argument. Please set path of your public key file in quote. "); }
+                    else
+                    {
                         Console.WriteLine(path);
                         if (File.Exists(path))
                         {
@@ -497,7 +556,7 @@ namespace firstchain
                             Console.WriteLine("result for hash key : " + SHAToHex(pkeyHASH, false));
                             uint myUTXOP = GetUTXOPointer(pkeyHASH);
                             UTXO myUTXO = GetOfficialUTXOAtPointer(myUTXOP);
-                            if ( myUTXO != null)
+                            if (myUTXO != null)
                             {
                                 Console.WriteLine("UTXO Hash    :" + SHAToHex(pkeyHASH, false));
                                 Console.WriteLine("UTXO Pointer :" + myUTXOP);
@@ -508,18 +567,19 @@ namespace firstchain
                             {
                                 Console.WriteLine("UTXO of this public Key not existing in UTXO Set ");
                             }
-                            
+
                         }
                         else
                         {
-                            Console.WriteLine("Path : " +path+ " does not exist. Please set path of your public key file. ");
+                            Console.WriteLine("Path : " + path + " does not exist. Please set path of your public key file. ");
                         }
                         argumentFound = true;
                     }
                 }
                 if (argument == "verifychain")
                 {
-                    if (ValidYesOrNo("[WARNING] Verify blockchain can take a lot of time.")) {
+                    if (ValidYesOrNo("[WARNING] Verify blockchain can take a lot of time."))
+                    {
                         Console.WriteLine("Verifying Blockchain...");
                         if (isBlockChainValid())
                         {
@@ -530,26 +590,28 @@ namespace firstchain
                             Console.WriteLine("Blockchain is not valid! ");
                         }
 
-                    } 
+                    }
 
                     argumentFound = true;
                 }
                 if (argument == "buildutxos")
                 {
                     if (ValidYesOrNo("[WARNING] It will delete current UTXO Set, then rebuilt it can take a lot of time."))
-                    { Console.WriteLine("Please wait during UTXO Set writting...");
-                      BuildUTXOSet();
-                      Console.WriteLine("UTXO Set writting finished!");
+                    {
+                        Console.WriteLine("Please wait during UTXO Set writting...");
+                        BuildUTXOSet();
+                        Console.WriteLine("UTXO Set writting finished!");
                     }
                     argumentFound = true;
                 }
                 if (argument == "initchain")
                 {
-                    
+
                     if (ValidYesOrNo("[WARNING] It will delete UTXO Set, blockchain files, PTX file and forks. You will be disconnected! "))
                     {
                         NT = null; // we should close nt
-                        ClearAllFiles(); CheckFilesAtRoot();PrintChainInfo(); }
+                        ClearAllFiles(); CheckFilesAtRoot(); PrintChainInfo();
+                    }
                     argumentFound = true;
                 }
 
@@ -561,7 +623,7 @@ namespace firstchain
                     string utxopArgs = GetStringAfterArgs(argument, "utxop:");
                     string minlockArgs = GetStringAfterArgs(argument, "minlock:");
                     string ntimeArgs = GetStringAfterArgs(argument, "ntime:");
-                    if ( pkeyArgs.Length != 0)
+                    if (pkeyArgs.Length != 0)
                     {
                         argumentFound = true;
                         uint utxopointer = 0;
@@ -571,50 +633,54 @@ namespace firstchain
                         {
                             byte[] pkeyHASH = ComputeSHA256(File.ReadAllBytes(path));
                             bool Continue = true;
-                            if ( utxopArgs.Length == 0)
+                            if (utxopArgs.Length == 0)
                             {
-                                if ( !ValidYesOrNo("[WARNING] You didn't set an UTXO pointer.")) { Continue = false; }
+                                if (!ValidYesOrNo("[WARNING] You didn't set an UTXO pointer.")) { Continue = false; }
                             }
                             else
                             {
                                 uint parsePointer = 0;
-                                if ( !uint.TryParse(utxopArgs, out parsePointer) && Continue)
+                                if (!uint.TryParse(utxopArgs, out parsePointer) && Continue)
                                 {
                                     if (!ValidYesOrNo("[WARNING] Incorrect UTXO pointer") && Continue) { Continue = false; }
                                 }
                                 else
                                 {
                                     UTXO utxo = GetOfficialUTXOAtPointer(parsePointer);
-                                    if ( utxo == null && Continue) { if (!ValidYesOrNo("[WARNING] Incorrect UTXO pointer")) { Continue = false; } }
-                                    else {
-                                        if (!utxo.HashKey.SequenceEqual(pkeyHASH) && Continue) { if (!ValidYesOrNo("[WARNING] Incorrect UTXO pointer"))
+                                    if (utxo == null && Continue) { if (!ValidYesOrNo("[WARNING] Incorrect UTXO pointer")) { Continue = false; } }
+                                    else
+                                    {
+                                        if (!utxo.HashKey.SequenceEqual(pkeyHASH) && Continue)
+                                        {
+                                            if (!ValidYesOrNo("[WARNING] Incorrect UTXO pointer"))
                                             { Continue = false; }
                                         }
-                                        
+
                                     }
-                                    if ( parsePointer == 0 && Continue) { if (!ValidYesOrNo("[WARNING] Incorrect UTXO pointer")) { Continue = false; }}
+                                    if (parsePointer == 0 && Continue) { if (!ValidYesOrNo("[WARNING] Incorrect UTXO pointer")) { Continue = false; } }
                                     utxopointer = parsePointer;
                                 }
-                               
+
                             }
                             if (Continue)
                             {
                                 uint mnlock = 5000;
                                 uint nTime = 0;
-                                if ( minlockArgs.Length != 0) {
+                                if (minlockArgs.Length != 0)
+                                {
                                     uint.TryParse(minlockArgs, out mnlock);
                                 }
                                 if (ntimeArgs.Length != 0)
                                 {
                                     uint.TryParse(ntimeArgs, out nTime);
                                 }
-                                if ( nTime == 0)
+                                if (nTime == 0)
                                 {
                                     while (true)
                                     {
                                         Console.WriteLine("mining in finito");
                                         // wait that pendingblockfiles are empty and broadcast is empty
-                                        if ( NT != null)
+                                        if (NT != null)
                                         {
                                             while (PendingBlockFiles.Count != 0 || BroadcastQueue.Count != 0)
                                             {
@@ -622,18 +688,18 @@ namespace firstchain
                                                 Thread.Sleep(500);
                                             }
                                         }
-                                       StartMining(pkeyHASH, utxopointer, mnlock, 1);
-                                        PendingBlockFiles.Add(new Tuple<bool,string>(true,_folderPath + "winblock"));
+                                        StartMining(pkeyHASH, utxopointer, mnlock, 1);
+                                        PendingBlockFiles.Add(new Tuple<bool, string>(true, _folderPath + "winblock"));
                                     }
                                 }
                                 else
                                 {
                                     Console.WriteLine("start mining " + nTime + " times ");
                                     StartMining(pkeyHASH, utxopointer, mnlock, nTime);
-                                    PendingBlockFiles.Add(new Tuple<bool,string>(true,_folderPath + "winblock"));
+                                    PendingBlockFiles.Add(new Tuple<bool, string>(true, _folderPath + "winblock"));
 
                                 }
-                                
+
 
 
                                 argumentFound = true;
@@ -644,7 +710,7 @@ namespace firstchain
                         {
                             Console.WriteLine("Path : " + path + " does not exist. Please set path of your public key file. ");
                         }
-                     }
+                    }
                     else
                     {
                         Console.WriteLine("invalid argument. Please set path of your public key file in quote. ");
@@ -668,7 +734,7 @@ namespace firstchain
                     string rutxopArgs = GetStringAfterArgs(argument, "rutxop:");
                     string feeArgs = GetStringAfterArgs(argument, "fee:");
                     string locktimeArgs = GetStringAfterArgs(argument, "lock:");
-                    if ( sprkeyArgs.Length == 0 || spukeyArgs.Length == 0 || sutxopArgs.Length == 0 || amountArgs.Length == 0 || rpukeyArgs.Length == 0
+                    if (sprkeyArgs.Length == 0 || spukeyArgs.Length == 0 || sutxopArgs.Length == 0 || amountArgs.Length == 0 || rpukeyArgs.Length == 0
                        || rutxopArgs.Length == 0 || feeArgs.Length == 0 || locktimeArgs.Length == 0)
                     {
                         Console.WriteLine("missing argument. see getcmdinfo. ");
@@ -680,7 +746,7 @@ namespace firstchain
                         uint rutxop = 0;
                         uint fee = 0;
                         uint locktime = 0;
-                        if ( !File.Exists(sprkeyArgs) || !File.Exists(spukeyArgs) || !uint.TryParse(sutxopArgs,out sutxop) || !uint.TryParse(amountArgs, out amount)
+                        if (!File.Exists(sprkeyArgs) || !File.Exists(spukeyArgs) || !uint.TryParse(sutxopArgs, out sutxop) || !uint.TryParse(amountArgs, out amount)
                             || !File.Exists(rpukeyArgs) || !uint.TryParse(rutxopArgs, out rutxop) || !uint.TryParse(feeArgs, out fee) || !uint.TryParse(locktimeArgs, out locktime))
                         {
                             Console.WriteLine("invalid argument. see getcmdinfo. ");
@@ -724,21 +790,21 @@ namespace firstchain
         {
             int startIndex = searchstring.IndexOf(arg);
             int delimcounter = 0;
-            if ( startIndex == -1) { return ""; }
+            if (startIndex == -1) { return ""; }
             List<char> result = new List<char>();
             for (int i = startIndex + arg.Length; i < searchstring.Length; i++)
             {
-                if ( searchstring[i] == specificdelimiter && specificdelimiter == ' ')
+                if (searchstring[i] == specificdelimiter && specificdelimiter == ' ')
                 {
                     break;
-                    
+
                 }
                 else
                 {
-                    if ( specificdelimiter == '\"' && searchstring[i] == '\"')
+                    if (specificdelimiter == '\"' && searchstring[i] == '\"')
                     {
                         delimcounter++;
-                        if ( delimcounter == 2)
+                        if (delimcounter == 2)
                         {
                             break;
                         }
@@ -747,7 +813,7 @@ namespace firstchain
                 result.Add(searchstring[i]);
             }
             char[] chars = new char[result.Count];
-            for (int i = 0; i < result.Count; i++ )
+            for (int i = 0; i < result.Count; i++)
             {
                 chars[i] = result[i];
             }
@@ -764,11 +830,11 @@ namespace firstchain
                 Console.Write("Do you want to procceed ? [y/n] ");
                 response = Console.ReadKey(false).Key;   // true is intercept key (dont show), false is show
                 if (response != ConsoleKey.Enter)
-                     Console.WriteLine();
+                    Console.WriteLine();
 
             } while (response != ConsoleKey.Y && response != ConsoleKey.N);
 
-            if ( response == ConsoleKey.Y)
+            if (response == ConsoleKey.Y)
             {
                 return true;
             }
@@ -776,7 +842,7 @@ namespace firstchain
             {
                 return false;
             }
-           
+
         }
         static string getfilePath(char[] searchstring)
         {
@@ -808,7 +874,7 @@ namespace firstchain
         //----------------------- INFO        ---------------------
         public static void PrintArgumentInfo()
         {
-            
+
             Console.WriteLine("-----------------");
             Console.WriteLine("Get Blockchain Info      -> getbcinfo");
             Console.WriteLine("Get Block Data at Index  -> getblockinfo #");
@@ -829,13 +895,13 @@ namespace firstchain
         }
         public static void PrintBlockData(Block b)
         {
-           
+
             Console.WriteLine("-----------------");
             Console.WriteLine("index         : " + b.Index);
             Console.WriteLine("merkle root   : " + SHAToHex(b.Hash, false));
             Console.WriteLine("previous hash : " + SHAToHex(b.previousHash, false));
             Console.WriteLine("#TX           : " + b.DataSize);
-            foreach ( Tx TXS in b.Data)
+            foreach (Tx TXS in b.Data)
             {
                 PrintTXData(TXS);
             }
@@ -843,18 +909,26 @@ namespace firstchain
             Console.WriteLine("nonce         : " + b.Nonce);
             Console.WriteLine("");
         }
+
+        public static void PrintBlockInASCII(Block b)
+        {
+            byte[] bytes = BlockToBytes(b);
+            string s = BitConverter.ToString(bytes);
+            Console.WriteLine(s);
+
+        }
         public static void PrintTXData(Tx TX)
         {
             Console.WriteLine("-----------------");
             Console.WriteLine("sender           : " + SHAToHex(ComputeSHA256(TX.sPKey), false));
             Console.WriteLine("receiver         : " + SHAToHex(TX.rHashKey, false));
-            Console.WriteLine("amount           : " + TX.Amount );
+            Console.WriteLine("amount           : " + TX.Amount);
             Console.WriteLine("fee              : " + TX.TxFee);
             Console.WriteLine("-----------------");
         }
         public static void PrintChainInfo()
         {
-    
+
             uint i = RequestLatestBlockIndex(false);
             uint a = RequestLatestBlockIndex(true);
             Console.WriteLine("[blockchain info]");
@@ -873,7 +947,7 @@ namespace firstchain
             Console.WriteLine("current difficulty : " + DIFF.ToString());
             Block genesis = GetBlockAtIndex(0);
             Block latest = GetBlockAtIndex(RequestLatestBlockIndex(true));
-            if ( genesis == null || latest == null) { Console.WriteLine("[WARNING] Your blockchain files are corrupted!"); return; }
+            if (genesis == null || latest == null) { Console.WriteLine("[WARNING] Your blockchain files are corrupted!"); return; }
             Console.WriteLine("[  genesis data   ]");
             PrintBlockData(genesis);
             Console.WriteLine("[latest block data]");
@@ -886,7 +960,7 @@ namespace firstchain
         {
             _folderPath = AppDomain.CurrentDomain.BaseDirectory + "\\";
             Console.WriteLine(_folderPath);
-            
+
             if (!File.Exists(_folderPath + "genesis"))
             {
                 CreateGenesis();
@@ -900,7 +974,7 @@ namespace firstchain
                 Directory.Delete(_folderPath + "net", true);
                 Directory.CreateDirectory(_folderPath + "net");
             }
-            if ( !Directory.Exists(_folderPath + "blockchain"))
+            if (!Directory.Exists(_folderPath + "blockchain"))
             {
                 Directory.CreateDirectory(_folderPath + "blockchain");
                 File.WriteAllBytes(_folderPath + "blockchain\\0", new byte[4]);
@@ -909,7 +983,7 @@ namespace firstchain
             }
             if (!File.Exists(_folderPath + "utxos"))
             {
-                File.WriteAllBytes(_folderPath + "utxos",new byte[4]);
+                File.WriteAllBytes(_folderPath + "utxos", new byte[4]);
             }
             if (!File.Exists(_folderPath + "ptx"))
             {
@@ -933,14 +1007,14 @@ namespace firstchain
             BigInteger b1 = BytesToUint256(MAXIMUM_TARGET);
             byte[] firsttarget = Uint256ToByteArray(b1); //< firsttarget is correctly write! 
             Block Genesis = new Block(0, gen, gen, new List<Tx>(), FIRST_UNIX_TIMESTAMP, new MinerToken(new byte[32], 0, 0), firsttarget, 0);
-           
+
             byte[] bytes = BlockToBytes(Genesis);
             File.WriteAllBytes(_folderPath + "genesis", bytes);
         }
         public static void ClearAllFiles() // CLEAR ALL FILES ( GENESIS, UTXO SET, PENDING TRANSACTION, FORKS, AND BLOCKCHAIN FILES. 
         {
             _folderPath = AppDomain.CurrentDomain.BaseDirectory + "\\";
-            if ( File.Exists(_folderPath + "genesis"))
+            if (File.Exists(_folderPath + "genesis"))
             {
                 File.Delete(_folderPath + "genesis");
             }
@@ -967,32 +1041,36 @@ namespace firstchain
         {
             // we first verify every blockchain file
             string[] files = Directory.GetFiles(_folderPath + "blockchain");
-            foreach ( string s in files)
+            foreach (string s in files)
             {
-                if (!isHeaderCorrectInBlockFile(s)) {
+                if (!isHeaderCorrectInBlockFile(s))
+                {
                     if (ValidYesOrNo("[WARNING] Your blockchain data is corrupted. Should reinitialize all files.")) { ClearAllFiles(); CheckFilesAtRoot(); return; }
                 }
-                
+
             }
             // then we verify every fork
             files = Directory.GetFiles(_folderPath + "fork");
             foreach (string s in files)
             {
-                if (!isHeaderCorrectInBlockFile(s)) {
-                    if (ValidYesOrNo("[WARNING] Fork file " + s +" corrupted. Should delete this fork file ")) { File.Delete(s); }
+                if (!isHeaderCorrectInBlockFile(s))
+                {
+                    if (ValidYesOrNo("[WARNING] Fork file " + s + " corrupted. Should delete this fork file ")) { File.Delete(s); }
                 }
-                
+
             }
             // then we verify utxo set  -> reminder : header is 4 bytes. (currency volume ). UTXO FORMAT is 40 bytes.
             uint fLenght = (uint)new FileInfo(_folderPath + "utxos").Length;
-            if ( fLenght < 4) { Console.WriteLine("utxo set file corrupted"); }
+            if (fLenght < 4) { Console.WriteLine("utxo set file corrupted"); }
             fLenght -= 4;
-            if ( fLenght % 40 != 0 && fLenght != 4) {
+            if (fLenght % 40 != 0 && fLenght != 4)
+            {
                 if (ValidYesOrNo("[WARNING] UTXO Set file corrupted. Should rebuild UTXO Set. ")) { BuildUTXOSet(); }
             } // we should absolutely then rebuild the utxo set. 
             // then we verify ptx  -> no header here. TX FORMAT is 1100 bytes.
             fLenght = (uint)new FileInfo(_folderPath + "ptx").Length;
-            if ( fLenght != 0 && fLenght % 1100 != 0) {
+            if (fLenght != 0 && fLenght % 1100 != 0)
+            {
                 if (ValidYesOrNo("[WARNING] PTX file corrupted. Should reinitialize ptx file ")) { File.Delete(_folderPath + "ptx"); CheckFilesAtRoot(); }
             }
         }
@@ -1000,14 +1078,14 @@ namespace firstchain
         {
             uint latestIndex = RequestLatestBlockIndexInFile(_filePath);
             Block b = GetBlockAtIndexInFile(latestIndex, _filePath);
-            if ( b == null) { Console.WriteLine("no block at index specify by header :" + latestIndex); return false;  }
+            if (b == null) { Console.WriteLine("no block at index specify by header :" + latestIndex); return false; }
             return true;
         }
         //------------------------ BYTE MANIP ---------------------
 
         public static List<byte> AddBytesToList(List<byte> list, byte[] bytes)
         {
-            foreach ( byte b in bytes) { list.Add(b); }
+            foreach (byte b in bytes) { list.Add(b); }
             return list;
         }
         public static byte[] ListToByteArray(List<byte> list)
@@ -1089,14 +1167,14 @@ namespace firstchain
         {
 
             if (ValidYesOrNo("[FATAL ERROR] Should reinit chain and close app : " + msg)) { ClearAllFiles(); Environment.Exit(0); }
-           
+
         }
 
-      
+
         //------------------------------------------------------
         public static MemoryMappedFile MemFile(string path) //< CONSTRUCTOR TO CREATE A  MAPPED FILE with fileshare.read ... 
         {
-            return MemoryMappedFile.CreateFromFile( 
+            return MemoryMappedFile.CreateFromFile(
                       //include a readonly shared stream
                       File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read),
                       //not mapping to a name
@@ -1119,22 +1197,22 @@ namespace firstchain
             //{
             // using (MemoryMappedViewStream memoryMappedViewStream = memoryMappedFile.CreateViewStream(startIndex, length, MemoryMappedFileAccess.Read))
             using (MemoryMappedFile memFile = MemFile(_filePath))
-            { 
-            using (MemoryMappedViewStream memoryMappedViewStream = memFile.CreateViewStream(startIndex, length, MemoryMappedFileAccess.Read))
             {
-                byte[] result = new byte[length];
-                for (uint i = 0; i < length; i++)
+                using (MemoryMappedViewStream memoryMappedViewStream = memFile.CreateViewStream(startIndex, length, MemoryMappedFileAccess.Read))
                 {
-                    result[i] = (byte)memoryMappedViewStream.ReadByte();
-                }
+                    byte[] result = new byte[length];
+                    for (uint i = 0; i < length; i++)
+                    {
+                        result[i] = (byte)memoryMappedViewStream.ReadByte();
+                    }
 
-                return result;
-            }
+                    return result;
+                }
             }
         }
         public static void OverWriteBytesInFile(uint startIndex, string _filePath, byte[] bytes) // can result an error. cant use file get length. 
         {
-            
+
             using (MemoryMappedFile memoryMappedFile = MemoryMappedFile.CreateFromFile(_filePath))
             {
                 using (MemoryMappedViewStream memoryMappedViewStream = memoryMappedFile.CreateViewStream(startIndex, bytes.Length))
@@ -1145,7 +1223,7 @@ namespace firstchain
         }
         public static void AppendBytesToFile(string _filePath, byte[] bytes)
         {
-           
+
             using (FileStream f = new FileStream(_filePath, FileMode.Append))
             {
                 f.Write(bytes, 0, bytes.Length);
@@ -1156,14 +1234,14 @@ namespace firstchain
         {
             FileInfo fi = new FileInfo(_filePath);
             FileStream fs = new FileStream(_filePath, FileMode.Open);
-            
+
             fs.SetLength(fi.Length - length);
             fs.Close();
         }
-        
+
         public static UTXO BytesToUTXO(byte[] bytes) // CAN RESULT NULL.
         {
-            if ( bytes.Length != 40) { return null;  }
+            if (bytes.Length != 40) { return null; }
 
             uint byteOffset = 0;
             byte[] pKey = new byte[32];
@@ -1196,9 +1274,9 @@ namespace firstchain
         }
         public static Tx BytesToTx(byte[] bytes) // CAN RESULT NULL
         {
-            if ( bytes.Length != 1100) { return null;  }
+            if (bytes.Length != 1100) { return null; }
 
-            
+
             uint byteOffset = 0;
             byte[] sPkey = new byte[532];
             byte[] Amount = new byte[4];
@@ -1263,7 +1341,7 @@ namespace firstchain
         {
 
             List<byte> Databuilder = new List<byte>();
-            Databuilder = AddBytesToList(Databuilder,  trans.sPKey);
+            Databuilder = AddBytesToList(Databuilder, trans.sPKey);
             Databuilder = AddBytesToList(Databuilder, BitConverter.GetBytes(trans.Amount));
             Databuilder = AddBytesToList(Databuilder, trans.rHashKey);
             Databuilder = AddBytesToList(Databuilder, BitConverter.GetBytes(trans.LockTime));
@@ -1276,7 +1354,7 @@ namespace firstchain
         }
         public static MinerToken BytesToMinerToken(byte[] bytes) // CAN RESULT NULL
         {
-            if ( bytes.Length != 40) { return null;  }
+            if (bytes.Length != 40) { return null; }
             byte[] hashKey = new byte[32];
             byte[] utxoP = new byte[4];
             byte[] reward = new byte[4];
@@ -1307,7 +1385,7 @@ namespace firstchain
         }
         public static Block BytesToBlock(byte[] bytes) // CAN RESULT NULL
         {
-            if (bytes.Length < 152 ) { return null; }
+            if (bytes.Length < 152) { return null; }
 
             byte[] index = new byte[4];
             byte[] hash = new byte[32];
@@ -1315,82 +1393,82 @@ namespace firstchain
             byte[] ds = new byte[4];
             List<Tx> dt = new List<Tx>();
             byte[] ts = new byte[4];
-            MinerToken minertoken; 
+            MinerToken minertoken;
             byte[] ht = new byte[32];
             byte[] nonce = new byte[4];
 
 
             uint byteOffset = 0;
-            for (uint i = byteOffset; i < byteOffset+4; i++)
+            for (uint i = byteOffset; i < byteOffset + 4; i++)
             {
                 index[i - byteOffset] = bytes[i];
             }
             byteOffset += 4;
-            for (uint i = byteOffset; i < byteOffset+32; i++)
+            for (uint i = byteOffset; i < byteOffset + 32; i++)
             {
                 hash[i - byteOffset] = bytes[i];
             }
             byteOffset += 32;
-            for (uint i = byteOffset; i < byteOffset+32; i++)
+            for (uint i = byteOffset; i < byteOffset + 32; i++)
             {
                 phash[i - byteOffset] = bytes[i];
             }
             byteOffset += 32;
-            for (uint i = byteOffset; i < byteOffset+4; i++)
+            for (uint i = byteOffset; i < byteOffset + 4; i++)
             {
                 ds[i - byteOffset] = bytes[i];
             }
             byteOffset += 4;
 
-            if (bytes.Length != 72 + (BitConverter.ToUInt32(ds, 0) * 1100) + 80) { return null;  }
-            for (uint i = 0; i < BitConverter.ToUInt32(ds,0); i++)
+            if (bytes.Length != 72 + (BitConverter.ToUInt32(ds, 0) * 1100) + 80) { return null; }
+            for (uint i = 0; i < BitConverter.ToUInt32(ds, 0); i++)
             {
                 byte[] txBytes = new byte[1100];
-                for (uint n = byteOffset; n < byteOffset+1100; n++)
+                for (uint n = byteOffset; n < byteOffset + 1100; n++)
                 {
                     txBytes[n - byteOffset] = bytes[n]; //  out of range exception 
                 }
                 byteOffset += 1100;
                 Tx TX = BytesToTx(txBytes);
-                if ( TX == null) { return null;  }
+                if (TX == null) { return null; }
                 dt.Add(TX);
             }
 
-            for (uint i = byteOffset; i < byteOffset+4; i++)
+            for (uint i = byteOffset; i < byteOffset + 4; i++)
             {
                 ts[i - byteOffset] = bytes[i];
             }
             byteOffset += 4;
             byte[] mbytes = new byte[40];
-            for (uint i = byteOffset; i < byteOffset+40; i++)
+            for (uint i = byteOffset; i < byteOffset + 40; i++)
             {
                 mbytes[i - byteOffset] = bytes[i];
             }
             byteOffset += 40;
             minertoken = BytesToMinerToken(mbytes);
-            for (uint i = byteOffset; i < byteOffset+32; i++)
+            for (uint i = byteOffset; i < byteOffset + 32; i++)
             {
                 ht[i - byteOffset] = bytes[i];
             }
-          
+
             byteOffset += 32;
-            for (uint i = byteOffset; i < byteOffset+4; i++)
+            for (uint i = byteOffset; i < byteOffset + 4; i++)
             {
                 nonce[i - byteOffset] = bytes[i];
             }
 
-            return new Block(BitConverter.ToUInt32(index,0), hash, phash,  dt, BitConverter.ToUInt32(ts,0), minertoken, ht, BitConverter.ToUInt32(nonce,0));
+            return new Block(BitConverter.ToUInt32(index, 0), hash, phash, dt, BitConverter.ToUInt32(ts, 0), minertoken, ht, BitConverter.ToUInt32(nonce, 0));
 
         }
         public static byte[] BlockToBytes(Block b)
         {
-           
+
             List<byte> DataBuilder = new List<byte>();
-            DataBuilder = AddBytesToList(DataBuilder,BitConverter.GetBytes( b.Index ) );
+            DataBuilder = AddBytesToList(DataBuilder, BitConverter.GetBytes(b.Index));
             DataBuilder = AddBytesToList(DataBuilder, b.Hash);
             DataBuilder = AddBytesToList(DataBuilder, b.previousHash);
             DataBuilder = AddBytesToList(DataBuilder, BitConverter.GetBytes(b.DataSize));
-            foreach ( Tx trans in b.Data) { DataBuilder = AddBytesToList(DataBuilder, TxToBytes(trans)); }
+            foreach (Tx trans in b.Data) { DataBuilder = AddBytesToList(DataBuilder, TxToBytes(trans)); }
             DataBuilder = AddBytesToList(DataBuilder, BitConverter.GetBytes(b.TimeStamp));
             DataBuilder = AddBytesToList(DataBuilder, MinerTokenToBytes(b.minerToken));
             DataBuilder = AddBytesToList(DataBuilder, b.HashTarget);
@@ -1408,7 +1486,7 @@ namespace firstchain
             byte[] result = sha.ComputeHash(msg);
             return result;
         }
-        private static string SHAToHex(byte[] bytes, bool upperCase)
+        public static string SHAToHex(byte[] bytes, bool upperCase)
         {
             StringBuilder result = new StringBuilder(bytes.Length * 2);
 
@@ -1425,16 +1503,16 @@ namespace firstchain
                              .ToArray();
         }
         //------------------------ UTXO SET  ---------------------
-        
+
         public static void UpgradeUTXOSet(Block b) //< Apply when changing Official Blockchain Only. OverWriting UTXO depend of previous transaction. Produce dust.
         {
-           foreach (Tx TX in b.Data)
-           {
+            foreach (Tx TX in b.Data)
+            {
                 UTXO utxo = GetOfficialUTXOAtPointer(TX.sUTXOP);
-                if ( utxo == null) { FatalErrorHandler(0, "no utxo found during upgrade utxo set"); return; } // FATAL ERROR 
+                if (utxo == null) { FatalErrorHandler(0, "no utxo found during upgrade utxo set"); return; } // FATAL ERROR 
                 utxo = UpdateVirtualUTXO(TX, utxo, false);
                 OverWriteUTXOAtPointer(TX.sUTXOP, utxo);
-                if ( TX.rUTXOP != 0)
+                if (TX.rUTXOP != 0)
                 {
                     utxo = GetOfficialUTXOAtPointer(TX.rUTXOP);
                     if (utxo == null) { FatalErrorHandler(0, "no utxo found during upgrade utxo set"); return; } // FATAL ERROR
@@ -1445,24 +1523,24 @@ namespace firstchain
                 {
                     utxo = new UTXO(TX.rHashKey, TX.Amount, 0);
                     AddDust(utxo);
-                    
+
                 }
-           }
-           if ( b.minerToken.mUTXOP != 0)
-           {
+            }
+            if (b.minerToken.mUTXOP != 0)
+            {
                 UTXO utxo = GetOfficialUTXOAtPointer(b.minerToken.mUTXOP);
                 if (utxo == null) { FatalErrorHandler(0, "no utxo found during upgrade utxo set"); return; } // FATAL ERROR
                 uint mSold = utxo.Sold + b.minerToken.MiningReward;
-                uint mTOU = utxo.TokenOfUniqueness+1;
+                uint mTOU = utxo.TokenOfUniqueness + 1;
                 OverWriteUTXOAtPointer(b.minerToken.mUTXOP, new UTXO(b.minerToken.MinerPKEY, mSold, mTOU));
             }
-           else
-           {
+            else
+            {
                 UTXO utxo = new UTXO(b.minerToken.MinerPKEY, b.minerToken.MiningReward, 0);
                 AddDust(utxo);
-           }
+            }
             // overwrite currency_volume header. 
-            uint actual_volume = BitConverter.ToUInt32(GetBytesFromFile(0, 4, _folderPath + "utxos"),0);
+            uint actual_volume = BitConverter.ToUInt32(GetBytesFromFile(0, 4, _folderPath + "utxos"), 0);
             actual_volume += GetMiningReward(b.Index);
             OverWriteBytesInFile(0, _folderPath + "utxos", BitConverter.GetBytes(actual_volume));
         }
@@ -1473,7 +1551,7 @@ namespace firstchain
             {
                 if (i == uint.MaxValue) { break; }
                 Block b = GetBlockAtIndex(i);
-                if ( b == null) { FatalErrorHandler(0, "no block found during downgrade utxo set"); return; } // FATAL ERROR
+                if (b == null) { FatalErrorHandler(0, "no block found during downgrade utxo set"); return; } // FATAL ERROR
                 if (b.minerToken.mUTXOP != 0)
                 {
                     UTXO utxo = GetOfficialUTXOAtPointer(b.minerToken.mUTXOP);
@@ -1486,7 +1564,7 @@ namespace firstchain
                 {
                     DustCount++;
                 }
-                for (int a = b.Data.Count-1; a>= 0; a--)
+                for (int a = b.Data.Count - 1; a >= 0; a--)
                 {
                     if (a == uint.MaxValue) { break; }
                     Tx TX = b.Data[a];
@@ -1506,18 +1584,18 @@ namespace firstchain
                         DustCount++;
                     }
                 }
-             
+
             }
-            if (!RemoveDust(DustCount)) { FatalErrorHandler(0, "bad dust removing during downgrade utxo set"); return;  } // FATAL ERROR
+            if (!RemoveDust(DustCount)) { FatalErrorHandler(0, "bad dust removing during downgrade utxo set"); return; } // FATAL ERROR
             OverWriteBytesInFile(0, _folderPath + "utxos", BitConverter.GetBytes(GetCurrencyVolume(index)));
         }
         public static UTXO GetDownGradedVirtualUTXO(uint index, UTXO utxo) //< get a virtual instance of a specific UTXO at specific time of the official chain
         {
-            for (uint i = RequestLatestBlockIndex(false); i >= index; i--) 
+            for (uint i = RequestLatestBlockIndex(false); i >= index; i--)
             {
                 if (i == uint.MaxValue) { break; }
                 Block b = GetBlockAtIndex(i);
-                if ( b == null) { Console.WriteLine("[missing block] Downgrade UTXO aborted "); return null; }
+                if (b == null) { Console.WriteLine("[missing block] Downgrade UTXO aborted "); return null; }
                 utxo = UpdateVirtualUTXOWithFullBlock(b, utxo, true);
             }
             return utxo;
@@ -1526,7 +1604,7 @@ namespace firstchain
         {
             uint nSold = utxo.Sold;
             uint nToken = utxo.TokenOfUniqueness;
-            if ( !reverse)
+            if (!reverse)
             {
                 foreach (Tx TX in b.Data)
                 {
@@ -1540,19 +1618,19 @@ namespace firstchain
                         nSold += TX.Amount;
                     }
                 }
-                if ( b.minerToken.mUTXOP != 0)
+                if (b.minerToken.mUTXOP != 0)
                 {
                     UTXO mUTXO = GetOfficialUTXOAtPointer(b.minerToken.mUTXOP);
-                    if ( mUTXO != null)
+                    if (mUTXO != null)
                     {
-                        if (utxo.HashKey.SequenceEqual(mUTXO.HashKey)) 
+                        if (utxo.HashKey.SequenceEqual(mUTXO.HashKey))
                         {
                             nSold += b.minerToken.MiningReward;
                         }
                     }
-                   
+
                 }
-               
+
             }
             else
             {
@@ -1568,10 +1646,10 @@ namespace firstchain
                     }
                 }
 
-                for (int i = b.Data.Count-1; i >= 0; i--)
+                for (int i = b.Data.Count - 1; i >= 0; i--)
                 {
                     if (i == uint.MaxValue) { break; }
-                    Tx TX  = b.Data[i];
+                    Tx TX = b.Data[i];
                     if (ComputeSHA256(TX.sPKey).SequenceEqual(utxo.HashKey))
                     {
 
@@ -1588,13 +1666,13 @@ namespace firstchain
             }
 
             return new UTXO(utxo.HashKey, nSold, nToken);
-            
+
         }
         public static UTXO UpdateVirtualUTXO(Tx TX, UTXO utxo, bool reverse) //< get a virtual instance of a specific UTXO updated from a an unique TX
         {
             uint nSold = utxo.Sold;
             uint nToken = utxo.TokenOfUniqueness;
-            if (ComputeSHA256(TX.sPKey).SequenceEqual(utxo.HashKey)) 
+            if (ComputeSHA256(TX.sPKey).SequenceEqual(utxo.HashKey))
             {
                 if (!reverse)
                 {
@@ -1604,10 +1682,10 @@ namespace firstchain
                 else
                 {
                     nSold += TX.Amount + TX.TxFee;
-                    nToken = TX.TokenOfUniqueness;  
+                    nToken = TX.TokenOfUniqueness;
                 }
             }
-            if (TX.rHashKey.SequenceEqual(utxo.HashKey)) 
+            if (TX.rHashKey.SequenceEqual(utxo.HashKey))
             {
                 if (!reverse)
                 {
@@ -1627,24 +1705,26 @@ namespace firstchain
             uint byteOffset = 4;
             while (true)
             {
-                if ( byteOffset >= CURRENT_UTXO_SIZE) { return 0; }
-                UTXO utxo = BytesToUTXO(GetBytesFromFile(byteOffset, 40, _folderPath + "utxos")); 
+                if (byteOffset >= CURRENT_UTXO_SIZE) { return 0; }
+                UTXO utxo = BytesToUTXO(GetBytesFromFile(byteOffset, 40, _folderPath + "utxos"));
                 if (utxo.HashKey.SequenceEqual(pKey))
                 {
                     return byteOffset;
                 }
                 byteOffset += 40;
             }
-       
-        }
-        public static bool OverWriteUTXOAtPointer(uint pointer, UTXO towrite) { // CAN RETURN FALSE
 
-            if ( pointer < 4 || pointer > CURRENT_UTXO_SIZE - 40) { return false; }
+        }
+        public static bool OverWriteUTXOAtPointer(uint pointer, UTXO towrite)
+        { // CAN RETURN FALSE
+
+            if (pointer < 4 || pointer > CURRENT_UTXO_SIZE - 40) { return false; }
             byte[] bytes = UTXOToBytes(towrite);
             OverWriteBytesInFile(pointer, _folderPath + "utxos", bytes);
             return true;
-        } 
-        public static void AddDust(UTXO utxo){
+        }
+        public static void AddDust(UTXO utxo)
+        {
 
             using (FileStream f = new FileStream(_folderPath + "utxos", FileMode.Append))
             {
@@ -1652,11 +1732,12 @@ namespace firstchain
                 f.Write(bytes, 0, bytes.Length);
             }
             CURRENT_UTXO_SIZE += 40;
-        } 
-        public static bool RemoveDust(uint nTime) { //< CAN RETURN FALSE
+        }
+        public static bool RemoveDust(uint nTime)
+        { //< CAN RETURN FALSE
 
             uint DustsLength = nTime * 40;
-            if ( CURRENT_UTXO_SIZE < DustsLength + 4 ) {  return false; } 
+            if (CURRENT_UTXO_SIZE < DustsLength + 4) { return false; }
             FileStream fs = new FileStream(_folderPath + "utxos", FileMode.Open);
             fs.SetLength(CURRENT_UTXO_SIZE - DustsLength);
             fs.Close();
@@ -1668,10 +1749,10 @@ namespace firstchain
         {
             uint firstTempIndex = BitConverter.ToUInt32(GetBytesFromFile(4, 8, _filePath), 0);
             uint latestTempIndex = BitConverter.ToUInt32(GetBytesFromFile(0, 4, _filePath), 0);
-            for (uint i = firstTempIndex; i < latestTempIndex+1; i++)
+            for (uint i = firstTempIndex; i < latestTempIndex + 1; i++)
             {
-                Block b = GetBlockAtIndexInFile(i,_filePath);
-                if ( b == null) { return; } 
+                Block b = GetBlockAtIndexInFile(i, _filePath);
+                if (b == null) { return; }
                 UpdatePendingTXFile(b);
             }
         }
@@ -1684,10 +1765,10 @@ namespace firstchain
             while (byteOffset < fl)
             {
                 Tx TX = BytesToTx(GetBytesFromFile(byteOffset, 1100, _folderPath + "ptx"));
-                if ( TX == null) { FatalErrorHandler(0, "no tx found in data during update pending tx file"); return; } // FATAL ERROR
-                foreach(Tx BTX in b.Data)
+                if (TX == null) { FatalErrorHandler(0, "no tx found in data during update pending tx file"); return; } // FATAL ERROR
+                foreach (Tx BTX in b.Data)
                 {
-                    if ( BTX == null) { FatalErrorHandler(0, "no tx found in builder during update pending tx file"); return; } // FATAL ERROR
+                    if (BTX == null) { FatalErrorHandler(0, "no tx found in builder during update pending tx file"); return; } // FATAL ERROR
                     if (TX.sPKey.SequenceEqual(BTX.sPKey) && TX.TokenOfUniqueness == BTX.TokenOfUniqueness)
                     {
                         // flip bytes then truncate
@@ -1699,7 +1780,7 @@ namespace firstchain
                         break;
                     }
                 }
-                
+
                 byteOffset += 1100;
 
             }
@@ -1726,7 +1807,7 @@ namespace firstchain
                     }
                 }
             }
-            foreach( string s in forkdel)
+            foreach (string s in forkdel)
             {
                 File.Delete(s);
             }
@@ -1738,22 +1819,22 @@ namespace firstchain
                 while (byteOffset < fl)
                 {
                     Tx TX = BytesToTx(GetBytesFromFile(byteOffset, 1100, _folderPath + "ptx"));
-                    if ( TX == null) { FatalErrorHandler(0, "no tx found in data during cleaning pending tx file"); return; } // FATAL ERROR
+                    if (TX == null) { FatalErrorHandler(0, "no tx found in data during cleaning pending tx file"); return; } // FATAL ERROR
                     bool _del = false;
                     if (TX.LockTime < unixTimestamp) { _del = true; }
-                    if ( _del)
+                    if (_del)
                     {
                         // flip bytes then truncate
-                        byte[] lastTX = GetBytesFromFile((uint)fl-1100, 1100, _folderPath + "ptx"); // FATAL ERROR
+                        byte[] lastTX = GetBytesFromFile((uint)fl - 1100, 1100, _folderPath + "ptx"); // FATAL ERROR
                         OverWriteBytesInFile(byteOffset, _folderPath + "ptx", lastTX);
                         TruncateFile(_folderPath + "ptx", 1100);
                         f = new FileInfo(_folderPath + "ptx");
                         fl = (int)f.Length;
 
                     }
-                    
+
                     byteOffset += 1100;
-                    
+
                 }
             }
         }
@@ -1762,60 +1843,61 @@ namespace firstchain
             // we first check if length can be divide by 1100 .. 
             FileInfo f = new FileInfo(_filePath);
             int fl = (int)f.Length;
-            if ( fl % 1100 != 0 || fl < 1100) { File.Delete(_filePath); return;  }
+            if (fl % 1100 != 0 || fl < 1100) { File.Delete(_filePath); return; }
             // can be very large ... so we have have to chunk every txs ... into split part of max 500 tx 4 the RAM alloc
             uint chunkcounter = 0;
             uint byteOffset = 0;
 
             // we only accept pending tx that avec 
-         
-            List<Tx> txs = new List<Tx>(); 
-            while ( byteOffset < fl)
+
+            List<Tx> txs = new List<Tx>();
+            while (byteOffset < fl)
             {
                 Tx Trans = BytesToTx(GetBytesFromFile(byteOffset, 1100, _filePath));
-                if ( Trans == null) { File.Delete(_filePath); return; }
+                if (Trans == null) { File.Delete(_filePath); return; }
                 txs.Add(Trans);
                 byteOffset += 1100;
                 chunkcounter++;
-                if ( chunkcounter > 500 || byteOffset == fl)
+                if (chunkcounter > 500 || byteOffset == fl)
                 {
                     chunkcounter = 0;
                     foreach (Tx TX in txs)
                     {
                         // we need to find first if this tx not existing in our 
-                        if (isTxValidforPending(TX, GetOfficialUTXOAtPointer(TX.sUTXOP))) {
+                        if (isTxValidforPending(TX, GetOfficialUTXOAtPointer(TX.sUTXOP)))
+                        {
                             AppendBytesToFile(_folderPath + "ptx", TxToBytes(TX));
-                           // NT.SendFile(_folderPath + "ptx", 2); //< Send our PTX File
+                            // NT.SendFile(_folderPath + "ptx", 2); //< Send our PTX File
                         }
-                        
+
                     }
-                    
+
                     txs = new List<Tx>();
 
                 }
             }
-           if ( needPropagate)
+            if (needPropagate)
             {
                 BroadcastQueue.Add(new BroadcastInfo(1, 2, _folderPath + "ptx"));
             }
-           File.Delete(_filePath);
+            File.Delete(_filePath);
         }
-        
+
         public static void ProccessTempBlocks(string _filePath, bool needPropagate) // MAIN FUNCTION TO VALID BLOCK
         {
             Console.WriteLine("STARTING PROCESSING BLOCKS FOR " + _filePath);
             FileInfo f = new FileInfo(_filePath);
-            if (f.Length < 8) {   File.Delete(_filePath); return; }
+            if (f.Length < 8) { File.Delete(_filePath); return; }
             if (!isHeaderCorrectInBlockFile(_filePath)) { Console.WriteLine("header incorrect!"); File.Delete(_filePath); return; }
 
             uint firstTempIndex = BitConverter.ToUInt32(GetBytesFromFile(4, 8, _filePath), 0);
             uint latestTempIndex = BitConverter.ToUInt32(GetBytesFromFile(0, 4, _filePath), 0);
             Console.WriteLine(firstTempIndex + " " + latestTempIndex);
             uint latestOfficialIndex = RequestLatestBlockIndex(true);
-            
+
             bool HardFork = false;
             Console.WriteLine((int)(latestOfficialIndex - MAX_RETROGRADE));
-            if ( (int)firstTempIndex <= (int)(latestOfficialIndex - MAX_RETROGRADE)) // create a uint max value error ! 
+            if ((int)firstTempIndex <= (int)(latestOfficialIndex - MAX_RETROGRADE)) // create a uint max value error ! 
             {
                 if (firstTempIndex == 0) { Console.WriteLine("NO GENESIS ALLOWED !"); File.Delete(_filePath); return; }
                 if (latestTempIndex < latestOfficialIndex + WINNING_RUN_DISTANCE) { Console.WriteLine("NOT WINNING DIST"); File.Delete(_filePath); return; }
@@ -1824,15 +1906,15 @@ namespace firstchain
             else
             {
                 uint latestIndex = RequestLatestBlockIndex(false);
-                if ( firstTempIndex > latestIndex+1) { File.Delete(_filePath); return; }
+                if (firstTempIndex > latestIndex + 1) { File.Delete(_filePath); return; }
                 // we check if we have a fork that contains specific index to mesure
-                if (latestTempIndex < latestOfficialIndex + 1) { File.Delete(_filePath); return; } 
+                if (latestTempIndex < latestOfficialIndex + 1) { File.Delete(_filePath); return; }
             }
             if (HardFork)
             {
                 Console.WriteLine("hard forking");
                 Block currentBlockReading = GetBlockAtIndexInFile(firstTempIndex, _filePath);
-                Block previousBlock = GetBlockAtIndex(firstTempIndex-1);
+                Block previousBlock = GetBlockAtIndex(firstTempIndex - 1);
                 if (currentBlockReading == null || previousBlock == null) { File.Delete(_filePath); return; }
                 List<uint> timestamps = new List<uint>();
                 uint TC = 0;
@@ -1849,13 +1931,14 @@ namespace firstchain
                     }
                 }
                 uint MINTIMESTAMP = GetTimeStampRequirementB(timestamps);
-             
+
                 byte[] tempTarget = new byte[32];
-                if ( isNewTargetRequired(firstTempIndex))
+                if (isNewTargetRequired(firstTempIndex))
                 {
                     // will just use gethashtarget with ComputeHashTargetB
                     Block earlierBlock;
-                    if ( previousBlock.Index + 1 <= TARGET_CLOCK) {
+                    if (previousBlock.Index + 1 <= TARGET_CLOCK)
+                    {
                         earlierBlock = GetBlockAtIndex(0); // get genesis
                         if (earlierBlock == null) { Console.WriteLine("[missing block]"); File.Delete(_filePath); return; }
                     }
@@ -1882,22 +1965,22 @@ namespace firstchain
                         return;
                     }
                     vUTXO = bV.Item2;
-                    
+
                     if (currentBlockReading.Index == latestTempIndex)
                     {
-                        DownGradeUTXOSet(firstTempIndex-1);
-                        DowngradeOfficialChain(firstTempIndex-1);
+                        DownGradeUTXOSet(firstTempIndex - 1);
+                        DowngradeOfficialChain(firstTempIndex - 1);
                         AddBlocksToOfficialChain(_filePath, needPropagate);
                         return;
                     }
                     previousBlock = currentBlockReading; //*
                     currentBlockReading = GetBlockAtIndexInFile(currentBlockReading.Index + 1, _filePath); //* 
                     if (currentBlockReading == null) { File.Delete(_filePath); return; }
-                    
+
                     timestamps.RemoveAt(0);
                     timestamps.Add(previousBlock.TimeStamp);
                     MINTIMESTAMP = GetTimeStampRequirementB(timestamps);
-                    
+
                     if (isNewTargetRequired(currentBlockReading.Index))
                     {
                         Block earlierBlock;
@@ -1907,7 +1990,7 @@ namespace firstchain
                             if (earlierBlock == null) { Console.WriteLine("[missing block]"); File.Delete(_filePath); return; }
                         }
                         else
-                        { 
+                        {
                             if (previousBlock.Index + 1 - TARGET_CLOCK > latestOfficialIndex)
                             {
                                 earlierBlock = GetBlockAtIndexInFile(previousBlock.Index + 1 - TARGET_CLOCK, _filePath);
@@ -1915,7 +1998,7 @@ namespace firstchain
                             }
                             else
                             {
-                                earlierBlock = GetBlockAtIndex(previousBlock.Index + 1  - TARGET_CLOCK);
+                                earlierBlock = GetBlockAtIndex(previousBlock.Index + 1 - TARGET_CLOCK);
                                 if (earlierBlock == null) { Console.WriteLine("[missing block]"); File.Delete(_filePath); return; }
                             }
                         }
@@ -1937,14 +2020,14 @@ namespace firstchain
 
                 string[] forkfiles = Directory.GetFiles(_folderPath + "fork");
                 uint latestIndex = RequestLatestBlockIndex(false);
-               // 
-                string _pathToGetPreviousBlock = ""; 
-                if ( firstTempIndex != latestOfficialIndex + 1) // searching A fork : if firsttempindex(1) is not latestofficialindex  (0) + 1
+                // 
+                string _pathToGetPreviousBlock = "";
+                if (firstTempIndex != latestOfficialIndex + 1) // searching A fork : if firsttempindex(1) is not latestofficialindex  (0) + 1
                 {
 
                     Console.WriteLine("called");
                     latestIndex = RequestLatestBlockIndex(false);
-                    if ( latestIndex > firstTempIndex - 1)
+                    if (latestIndex > firstTempIndex - 1)
                     {
                         _pathToGetPreviousBlock = GetIndexBlockChainFilePath(firstTempIndex - 1);
                         if (_pathToGetPreviousBlock == "")
@@ -1956,11 +2039,11 @@ namespace firstchain
                     {
                         // check if we can find a fork with this specific block file ... goes here when lightfork ... 
                         string forkpath = FindMatchingFork(currentBlockReading);
-                        if ( forkpath.Length == 0) { Console.WriteLine("[2]Can't find a fork to process those blocks. temp index : " + firstTempIndex); File.Delete(_filePath); return; }
-                        else { _pathToGetPreviousBlock = forkpath;  }
+                        if (forkpath.Length == 0) { Console.WriteLine("[2]Can't find a fork to process those blocks. temp index : " + firstTempIndex); File.Delete(_filePath); return; }
+                        else { _pathToGetPreviousBlock = forkpath; }
                         Block bb = GetBlockAtIndexInFile(latestTempIndex, _filePath);
-                        if ( bb == null) { Console.WriteLine("[missing block]"); File.Delete(_filePath); return; }
-                        if ( isForkAlreadyExisting(bb)) { Console.WriteLine("File Already Existing"); File.Delete(_filePath); return; }
+                        if (bb == null) { Console.WriteLine("[missing block]"); File.Delete(_filePath); return; }
+                        if (isForkAlreadyExisting(bb)) { Console.WriteLine("File Already Existing"); File.Delete(_filePath); return; }
                     }
                 }
                 else
@@ -1971,14 +2054,14 @@ namespace firstchain
                 Console.WriteLine(_pathToGetPreviousBlock);
                 Block previousBlock = GetBlockAtIndexInFile(firstTempIndex - 1, _pathToGetPreviousBlock);
 
-                if ( previousBlock == null) { File.Delete(_filePath); Console.WriteLine("wrong index specified 2"); return; }
-              
+                if (previousBlock == null) { File.Delete(_filePath); Console.WriteLine("wrong index specified 2"); return; }
+
                 List<uint> timestamps = new List<uint>();
                 uint TC = 0;
-                for (uint i = firstTempIndex-1; i >= 0; i--)
+                for (uint i = firstTempIndex - 1; i >= 0; i--)
                 {
                     if (i == uint.MaxValue) { break; }
-                    if ( i > latestOfficialIndex)
+                    if (i > latestOfficialIndex)
                     {
                         Block b = GetBlockAtIndexInFile(i, _pathToGetPreviousBlock);
                         if (b == null) { Console.WriteLine("[missing block]"); File.Delete(_filePath); return; }
@@ -2003,33 +2086,33 @@ namespace firstchain
                 {
                     // will just use gethashtarget with ComputeHashTargetB
                     Block earlierBlock;
-                        if ( latestOfficialIndex < previousBlock.Index+1 - TARGET_CLOCK)
+                    if (latestOfficialIndex < previousBlock.Index + 1 - TARGET_CLOCK)
+                    {
+                        uint lastindexfile = RequestLatestBlockIndexInFile(_pathToGetPreviousBlock);
+                        if (lastindexfile < previousBlock.Index + 1 - TARGET_CLOCK)
                         {
-                            uint lastindexfile = RequestLatestBlockIndexInFile(_pathToGetPreviousBlock);
-                            if ( lastindexfile < previousBlock.Index+1 - TARGET_CLOCK)
-                            {
-                                earlierBlock = GetBlockAtIndexInFile(previousBlock.Index+1 - TARGET_CLOCK, _filePath);
-                                if (earlierBlock == null) { Console.WriteLine("[missing block]"); File.Delete(_filePath); return; }
-                            }
-                            else
-                            {
-                                earlierBlock = GetBlockAtIndexInFile(previousBlock.Index+1 - TARGET_CLOCK, _pathToGetPreviousBlock); // it means that we have an index shit...
-                                if (earlierBlock == null) { Console.WriteLine("[missing block]"); File.Delete(_filePath); return; }
-                            }
-                            
+                            earlierBlock = GetBlockAtIndexInFile(previousBlock.Index + 1 - TARGET_CLOCK, _filePath);
+                            if (earlierBlock == null) { Console.WriteLine("[missing block]"); File.Delete(_filePath); return; }
                         }
                         else
                         {
-                            earlierBlock = GetBlockAtIndex(previousBlock.Index+1 - TARGET_CLOCK);
+                            earlierBlock = GetBlockAtIndexInFile(previousBlock.Index + 1 - TARGET_CLOCK, _pathToGetPreviousBlock); // it means that we have an index shit...
                             if (earlierBlock == null) { Console.WriteLine("[missing block]"); File.Delete(_filePath); return; }
-
                         }
-                        
-                    
-                  
+
+                    }
+                    else
+                    {
+                        earlierBlock = GetBlockAtIndex(previousBlock.Index + 1 - TARGET_CLOCK);
+                        if (earlierBlock == null) { Console.WriteLine("[missing block]"); File.Delete(_filePath); return; }
+
+                    }
+
+
+
                     tempTarget = ComputeHashTargetB(previousBlock, earlierBlock);
                     Console.WriteLine(previousBlock.Index + 1);
-                    
+
 
                 }
                 else
@@ -2044,16 +2127,16 @@ namespace firstchain
                     for (uint i = firstforkIndex; i < previousBlock.Index + 1; i++)
                     {
                         Block b = GetBlockAtIndexInFile(i, _pathToGetPreviousBlock);
-                        if ( b == null) { File.Delete(_filePath); return;  }
-                        
-                        foreach(Tx TXS in b.Data)
+                        if (b == null) { File.Delete(_filePath); return; }
+
+                        foreach (Tx TXS in b.Data)
                         {
                             bool _sFound = false;
                             int sIndex = 0;
                             bool _rFound = false;
                             int rIndex = 0;
                             UTXO rutxo = null;
-                         
+
                             for (int a = 0; a < vUTXO.Count; a++)
                             {
                                 if (vUTXO[a].HashKey.SequenceEqual(ComputeSHA256(TXS.sPKey)))
@@ -2067,7 +2150,7 @@ namespace firstchain
                                     rIndex = a;
                                     rutxo = vUTXO[a];
                                 }
-                                
+
                             }
                             if (!_sFound)
                             {
@@ -2080,11 +2163,11 @@ namespace firstchain
                             if (!_rFound)
                             {
                                 rutxo = GetOfficialUTXOAtPointer(TXS.rUTXOP);
-                                if ( rutxo != null)
+                                if (rutxo != null)
                                 {
                                     vUTXO.Add(UpdateVirtualUTXOWithFullBlock(b, GetOfficialUTXOAtPointer(TXS.rUTXOP), false));
                                 }
-                       
+
                             }
                             else
                             {
@@ -2102,15 +2185,15 @@ namespace firstchain
                             }
 
                         }
-                        
+
                         if (!_mFound)
                         {
                             UTXO mutxo = GetOfficialUTXOAtPointer(b.minerToken.mUTXOP);
-                            if ( mutxo != null)
+                            if (mutxo != null)
                             {
-                                vUTXO.Add(UpdateVirtualUTXOWithFullBlock(b, mutxo, false)); 
+                                vUTXO.Add(UpdateVirtualUTXOWithFullBlock(b, mutxo, false));
                             }
-                            
+
                         }
                         else
                         {
@@ -2118,7 +2201,7 @@ namespace firstchain
                         }
                     }
                 }
-             
+
                 while (true)
                 {
                     Tuple<bool, List<UTXO>> bV = IsBlockValid(currentBlockReading, previousBlock, MINTIMESTAMP, tempTarget, vUTXO);
@@ -2131,7 +2214,7 @@ namespace firstchain
                     vUTXO = bV.Item2; // vutxo are update! 
                     if (currentBlockReading.Index == latestTempIndex)
                     {
-                        
+
                         if (_pathToGetPreviousBlock == GetLatestBlockChainFilePath())
                         {
                             string newPath = GetNewForkFilePath();
@@ -2159,12 +2242,12 @@ namespace firstchain
                             Console.WriteLine("fork has been append.");
                             return;
                         }
-                        
+
                     }
                     previousBlock = currentBlockReading; //*
                     currentBlockReading = GetBlockAtIndexInFile(currentBlockReading.Index + 1, _filePath); //*
                     if (currentBlockReading == null) { File.Delete(_filePath); Console.WriteLine("wrong index specified 3"); return; }
-                    
+
                     timestamps.RemoveAt(0);
                     timestamps.Add(previousBlock.TimeStamp);
                     MINTIMESTAMP = GetTimeStampRequirementB(timestamps);
@@ -2204,23 +2287,23 @@ namespace firstchain
                         tempTarget = previousBlock.HashTarget;
                     }
                 }
-                
+
             }
-            
+
 
         }
 
         public static string FindMatchingFork(Block b)
         {
             string[] forkfiles = Directory.GetFiles(_folderPath + "fork");
-            foreach( string s in forkfiles)
+            foreach (string s in forkfiles)
             {
-               
+
                 uint latestIndex = RequestLatestBlockIndexInFile(s);
-                if ( latestIndex >= b.Index-1)
+                if (latestIndex >= b.Index - 1)
                 {
                     Block forkblock = GetBlockAtIndexInFile(b.Index - 1, s);
-                    if ( forkblock == null) { return ""; }
+                    if (forkblock == null) { return ""; }
                     if (forkblock.Hash.SequenceEqual(b.previousHash))
                     {
                         return s;
@@ -2235,8 +2318,8 @@ namespace firstchain
             foreach (string s in forkfiles)
             {
                 uint latestIndex = RequestLatestBlockIndexInFile(s);
-                
-                if (latestIndex >= b.Index )
+
+                if (latestIndex >= b.Index)
                 {
                     Block forkblock = GetBlockAtIndexInFile(b.Index, s);
                     if (forkblock == null) { return false; }
@@ -2253,22 +2336,22 @@ namespace firstchain
             Console.WriteLine("winning dist" + WINNING_RUN_DISTANCE);
             string[] forkfiles = Directory.GetFiles(_folderPath + "fork");
             bool _found = false;
-            foreach( string s in forkfiles)
+            foreach (string s in forkfiles)
             {
                 uint latestIndex = RequestLatestBlockIndexInFile(s);
                 uint latestOfficialIndex = RequestLatestBlockIndex(true);
-                if ( latestIndex >= latestOfficialIndex + WINNING_RUN_DISTANCE)
+                if (latestIndex >= latestOfficialIndex + WINNING_RUN_DISTANCE)
                 {
                     uint firstTempIndex = BitConverter.ToUInt32(GetBytesFromFile(4, 8, s), 0);
-                    if ( firstTempIndex < latestOfficialIndex)
+                    if (firstTempIndex < latestOfficialIndex)
                     {
-                        DowngradeOfficialChain(firstTempIndex-1);
-                        DownGradeUTXOSet(firstTempIndex-1);
+                        DowngradeOfficialChain(firstTempIndex - 1);
+                        DownGradeUTXOSet(firstTempIndex - 1);
                     }
                     AddBlocksToOfficialChain(s, needPropagate);
                     _found = true;
                     // clear all forks
-                   // Console.WriteLine("called a");
+                    // Console.WriteLine("called a");
                     break;
                 }
             }
@@ -2280,7 +2363,7 @@ namespace firstchain
                     File.Delete(s);
                 }
             }
-           
+
 
         }
         public static uint GetTimeStampRequirementA() //< will return current timestamp needed for next block 
@@ -2289,14 +2372,14 @@ namespace firstchain
             uint lastIndex = RequestLatestBlockIndex(true);
             List<uint> timestamp = new List<uint>();
             uint tcounter = 0;
-            for ( uint i = lastIndex; i >= 0; i--)
+            for (uint i = lastIndex; i >= 0; i--)
             {
                 if (i == uint.MaxValue) { break; }
                 Block b = GetBlockAtIndex(i);
-                if ( b == null) { return uint.MaxValue; } //< return a max value if an error occured! 
+                if (b == null) { return uint.MaxValue; } //< return a max value if an error occured! 
                 timestamp.Add(b.TimeStamp);
                 tcounter++;
-                if ( tcounter == TIMESTAMP_TARGET) { break; }
+                if (tcounter == TIMESTAMP_TARGET) { break; }
             }
             uint sum = 0;
             foreach (uint i in timestamp) { sum += i; }
@@ -2306,9 +2389,9 @@ namespace firstchain
 
         public static uint GetTimeStampRequirementB(List<uint> timestamp) //< will return current timestamp needed  
         {
-            
-            uint sum = 0; 
-            foreach(uint i in timestamp) { sum += i;  }
+
+            uint sum = 0;
+            foreach (uint i in timestamp) { sum += i; }
             sum /= (uint)timestamp.Count;
             return sum;
 
@@ -2324,7 +2407,7 @@ namespace firstchain
             else
             {
                 Block b = GetBlockAtIndex(index);
-                if ( b == null) { return CURRENT_HASH_TARGET; }
+                if (b == null) { return CURRENT_HASH_TARGET; }
                 CURRENT_HASH_TARGET = b.HashTarget;
             }
             return CURRENT_HASH_TARGET;
@@ -2334,11 +2417,11 @@ namespace firstchain
         {
             uint index = RequestLatestBlockIndex(true);
             Block pb = GetBlockAtIndex(index - TARGET_CLOCK);
-            if ( pb == null) { return CURRENT_HASH_TARGET; }
+            if (pb == null) { return CURRENT_HASH_TARGET; }
             uint TimeStampA = pb.TimeStamp;
-           
+
             Block b = GetBlockAtIndex(index);
-            if ( b == null) { return CURRENT_HASH_TARGET;  }
+            if (b == null) { return CURRENT_HASH_TARGET; }
             uint TimeStampB = b.TimeStamp;
             uint TimeSpent = TimeStampB - TimeStampA;
 
@@ -2366,7 +2449,7 @@ namespace firstchain
             }
             Console.WriteLine("new target decimal is : " + b1.ToString());
             return Uint256ToByteArray(b1);
-            
+
         }
 
         public static byte[] ComputeHashTargetB(Block latest, Block previous) //< compute Hash Target with specific block 
@@ -2410,7 +2493,7 @@ namespace firstchain
 
         public static bool isNewTargetRequired(uint index)
         {
-            if ( index < TARGET_CLOCK)
+            if (index < TARGET_CLOCK)
             {
                 return false;
             }
@@ -2426,21 +2509,21 @@ namespace firstchain
         }
 
 
-        public static string ConcatenateForks(string _path1, string _path2, uint endIndex )
+        public static string ConcatenateForks(string _path1, string _path2, uint endIndex)
         {
             // will get block of _path1 until endindex(not include) , then procceed to write full block of path2
             string newForkPath = GetNewForkFilePath();
             File.WriteAllBytes(newForkPath, new byte[4]);
             uint startIndex = RequestLatestBlockIndex(true);
             uint LastIndex = RequestLatestBlockIndexInFile(_path2);
-            for (uint i = startIndex + 1; i < endIndex ; i++)
+            for (uint i = startIndex + 1; i < endIndex; i++)
             {
                 Block b = GetBlockAtIndexInFile(i, _path1);
-                if ( b == null) { File.Delete(_path2); return ""; } // FATAL ERROR
+                if (b == null) { File.Delete(_path2); return ""; } // FATAL ERROR
                 byte[] bytes = BlockToBytes(b);
                 AppendBytesToFile(newForkPath, bytes);
             }
-            for (uint i = endIndex; i < LastIndex +  1; i++)
+            for (uint i = endIndex; i < LastIndex + 1; i++)
             {
                 Block b = GetBlockAtIndexInFile(i, _path2);
                 if (b == null) { File.Delete(_path2); FatalErrorHandler(0, "no block found in data during concatening forks file"); return ""; } // FATAL ERROR
@@ -2449,26 +2532,26 @@ namespace firstchain
                 UpdatePendingTXFile(b);
             }
             OverWriteBytesInFile(0, newForkPath, BitConverter.GetBytes(LastIndex));
-            Console.WriteLine("will delete " + _path2); 
-             File.Delete(_path2);
+            Console.WriteLine("will delete " + _path2);
+            File.Delete(_path2);
             return newForkPath;
         }
         public static void DowngradeOfficialChain(uint pointer) //< downgrade blockchain to specific length ( block#pointer not included!)
         {
             uint latestIndex = RequestLatestBlockIndex(true);
             int bytelength = 0;
-            for (uint i = pointer+1; i < latestIndex + 1; i ++)
+            for (uint i = pointer + 1; i < latestIndex + 1; i++)
             {
                 Block b = GetBlockAtIndex(i);
                 if (b == null) { FatalErrorHandler(0, "no block found in data during downgrading chain"); return; } // FATAL ERROR
                 bytelength += BlockToBytes(b).Length;
             }
             // we know the exact length of bytes we have to truncate.... we can use this value to erase blockchain part
-            while ( true)
+            while (true)
             {
                 string filePath = GetLatestBlockChainFilePath();
                 FileInfo f = new FileInfo(filePath);
-                if ( bytelength > f.Length)
+                if (bytelength > f.Length)
                 {
                     File.Delete(filePath);
                     bytelength -= (int)f.Length;
@@ -2480,7 +2563,7 @@ namespace firstchain
                     break;
                 }
             }
-            
+
             OverWriteBytesInFile(0, GetLatestBlockChainFilePath(), BitConverter.GetBytes(pointer));
             Console.WriteLine("Blockchain Downgraded at " + pointer);
         }
@@ -2507,15 +2590,15 @@ namespace firstchain
                 }
                 else
                 {
-                    OverWriteBytesInFile(0, blockchainPath, BitConverter.GetBytes(b.Index)); 
-                    AppendBytesToFile(blockchainPath, bytes); 
+                    OverWriteBytesInFile(0, blockchainPath, BitConverter.GetBytes(b.Index));
+                    AppendBytesToFile(blockchainPath, bytes);
                 }
                 UpgradeUTXOSet(b);
                 UpdatePendingTXFile(b);
             }
-            if ( needPropagate)
+            if (needPropagate)
             {
-                   BroadcastQueue.Add(new BroadcastInfo(2, 1));
+                BroadcastQueue.Add(new BroadcastInfo(2, 1));
             }
             string[] forkfiles = Directory.GetFiles(_folderPath + "fork");
             foreach (string s in forkfiles)
@@ -2523,7 +2606,7 @@ namespace firstchain
                 File.Delete(s);
             }
             Console.WriteLine("will delete " + filePath);
-            File.Delete(filePath); 
+            File.Delete(filePath);
             Console.WriteLine("Blockchain updated!");
             //arduino.SendTick("1");
 
@@ -2546,9 +2629,9 @@ namespace firstchain
             return false;
             uint lastIndex = RequestLatestBlockIndex(true);
             Block gen = GetBlockAtIndex(0);
-            if ( gen == null) { return false;  }
+            if (gen == null) { return false; }
             byte[] HashTarget = gen.HashTarget;
-            
+
             for (uint i = 1; i < lastIndex + 1; i++)
             {
                 Block b = GetBlockAtIndex(i);
@@ -2557,7 +2640,7 @@ namespace firstchain
                 if (isNewTargetRequired(i))
                 {
                     Block pb = GetBlockAtIndex(b.Index - TARGET_CLOCK);
-                    if ( pb == null) { return false;  }
+                    if (pb == null) { return false; }
                     HashTarget = ComputeHashTargetB(prevb, pb);
                 }
                 else
@@ -2565,26 +2648,26 @@ namespace firstchain
                     HashTarget = prevb.HashTarget;
                 }
                 // if (!IsBlockValid(b, prevb, 0, HashTarget)){ 
-                  //  return false;
-               // }
+                //  return false;
+                // }
             }
             return true;
         }
-        public static Tuple<bool,List<UTXO>> IsBlockValid(Block b, Block prevb, uint MIN_TIME_STAMP, byte[] HASHTARGET, List<UTXO> vUTXO) 
+        public static Tuple<bool, List<UTXO>> IsBlockValid(Block b, Block prevb, uint MIN_TIME_STAMP, byte[] HASHTARGET, List<UTXO> vUTXO)
         {
             uint latestIndex = RequestLatestBlockIndex(true);
-            if (!b.previousHash.SequenceEqual(prevb.Hash)) { Console.WriteLine("wrong previous hash"); return new Tuple<bool, List<UTXO>>(false, vUTXO);  }
+            if (!b.previousHash.SequenceEqual(prevb.Hash)) { Console.WriteLine("wrong previous hash"); return new Tuple<bool, List<UTXO>>(false, vUTXO); }
             uint unixTimestamp = (uint)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
             if (b.TimeStamp < MIN_TIME_STAMP || b.TimeStamp > unixTimestamp) { Console.WriteLine("wrong time stamp"); return new Tuple<bool, List<UTXO>>(false, vUTXO); }
-            if ( !b.HashTarget.SequenceEqual(HASHTARGET)) { Console.WriteLine("wrong HASH TARGET"); return new Tuple<bool, List<UTXO>>(false, vUTXO); }
+            if (!b.HashTarget.SequenceEqual(HASHTARGET)) { Console.WriteLine("wrong HASH TARGET"); return new Tuple<bool, List<UTXO>>(false, vUTXO); }
             uint sumFEE = 0;
             //------------------------------------ > WORKING VIRTUALIZING UTXO
-            foreach ( Tx TX in b.Data)
+            foreach (Tx TX in b.Data)
             {
-                
+
                 bool _sFound = false;
                 bool _rFound = false;
-                int sIndex = 0; 
+                int sIndex = 0;
                 UTXO sutxo = null;
                 int rIndex = 0;
                 UTXO rutxo = null;
@@ -2610,22 +2693,22 @@ namespace firstchain
                     }
 
                 }
-                if(!_sFound)
+                if (!_sFound)
                 {
-                    sutxo = GetOfficialUTXOAtPointer(TX.sUTXOP); 
+                    sutxo = GetOfficialUTXOAtPointer(TX.sUTXOP);
                     if (sutxo == null) { return new Tuple<bool, List<UTXO>>(false, vUTXO); }
-                    if ( b.Index <= latestIndex) { sutxo = GetDownGradedVirtualUTXO(b.Index, sutxo);  }
+                    if (b.Index <= latestIndex) { sutxo = GetDownGradedVirtualUTXO(b.Index, sutxo); }
                 }
                 if (!_rFound)
                 {
                     rutxo = GetOfficialUTXOAtPointer(TX.rUTXOP);
-                    if (rutxo != null && b.Index <= latestIndex ) { rutxo = GetDownGradedVirtualUTXO(b.Index, rutxo); }
+                    if (rutxo != null && b.Index <= latestIndex) { rutxo = GetDownGradedVirtualUTXO(b.Index, rutxo); }
                 }
-                if (!isTxValidforPending(TX,sutxo)) { Console.WriteLine("wrong TX"); return new Tuple<bool, List<UTXO>>(false, vUTXO); }
-                
+                if (!isTxValidforPending(TX, sutxo)) { Console.WriteLine("wrong TX"); return new Tuple<bool, List<UTXO>>(false, vUTXO); }
+
                 sumFEE += TX.TxFee;
                 UTXO nsUTXO = UpdateVirtualUTXO(TX, sutxo, false);
-               
+
 
                 if (_sFound)
                 {
@@ -2635,7 +2718,7 @@ namespace firstchain
                 {
                     vUTXO.Add(nsUTXO);
                 }
-                if ( rutxo != null)
+                if (rutxo != null)
                 {
                     UTXO nrUTXO = UpdateVirtualUTXO(TX, rutxo, false);
                     if (_rFound)
@@ -2647,7 +2730,7 @@ namespace firstchain
                         vUTXO.Add(nrUTXO);
                     }
                 }
-               
+
             }
             bool _mFound = false;
             int mIndex = 0;
@@ -2655,25 +2738,25 @@ namespace firstchain
 
             for (int i = 0; i < vUTXO.Count; i++)
             {
-               
-               if (vUTXO[i].HashKey.SequenceEqual(b.minerToken.MinerPKEY))
-               {
-                   mutxo = vUTXO[i];
-                   mIndex = i;
-                   _mFound = true;
-                   break;
-               }
-                
+
+                if (vUTXO[i].HashKey.SequenceEqual(b.minerToken.MinerPKEY))
+                {
+                    mutxo = vUTXO[i];
+                    mIndex = i;
+                    _mFound = true;
+                    break;
+                }
+
             }
             if (!_mFound)
             {
                 mutxo = GetOfficialUTXOAtPointer(b.minerToken.mUTXOP);
                 if (mutxo != null && b.Index <= latestIndex) { mutxo = GetDownGradedVirtualUTXO(b.Index, mutxo); }
             }
-            
-            if ( mutxo != null)
+
+            if (mutxo != null)
             {
-                UTXO nmUTXO = UpdateVirtualUTXOWithFullBlock(b, mutxo, false); 
+                UTXO nmUTXO = UpdateVirtualUTXOWithFullBlock(b, mutxo, false);
                 if (_mFound)
                 {
                     vUTXO[mIndex] = nmUTXO;
@@ -2683,22 +2766,22 @@ namespace firstchain
                     vUTXO.Add(nmUTXO);
                 }
             }
-           
+
 
             //------------------------------------ > <
-            if ( b.minerToken.mUTXOP != 0)
+            if (b.minerToken.mUTXOP != 0)
             {
                 UTXO mUTXO = GetOfficialUTXOAtPointer(b.minerToken.mUTXOP);
-                if ( mUTXO == null) { Console.WriteLine("wrong UTXO pointer"); return new Tuple<bool, List<UTXO>>(false, vUTXO); }
+                if (mUTXO == null) { Console.WriteLine("wrong UTXO pointer"); return new Tuple<bool, List<UTXO>>(false, vUTXO); }
                 else { if (!mUTXO.HashKey.SequenceEqual(b.minerToken.MinerPKEY)) { Console.WriteLine("wrong UTXO pointer"); return new Tuple<bool, List<UTXO>>(false, vUTXO); } }
             }
-            if ( b.minerToken.MiningReward != GetMiningReward(b.Index) + sumFEE) { Console.WriteLine("wrong mining reward"); return new Tuple<bool, List<UTXO>>(false, vUTXO); }
+            if (b.minerToken.MiningReward != GetMiningReward(b.Index) + sumFEE) { Console.WriteLine("wrong mining reward"); return new Tuple<bool, List<UTXO>>(false, vUTXO); }
             // now verify Merkle Root Correctness. 
             List<byte> dataBuilder = new List<byte>();
             dataBuilder = AddBytesToList(dataBuilder, BitConverter.GetBytes(b.Index));
             dataBuilder = AddBytesToList(dataBuilder, b.previousHash);
             dataBuilder = AddBytesToList(dataBuilder, BitConverter.GetBytes(b.DataSize));
-            foreach ( Tx TX in b.Data) { dataBuilder = AddBytesToList(dataBuilder, TxToBytes(TX)); }
+            foreach (Tx TX in b.Data) { dataBuilder = AddBytesToList(dataBuilder, TxToBytes(TX)); }
             dataBuilder = AddBytesToList(dataBuilder, BitConverter.GetBytes(b.TimeStamp));
             dataBuilder = AddBytesToList(dataBuilder, MinerTokenToBytes(b.minerToken));
             dataBuilder = AddBytesToList(dataBuilder, b.HashTarget);
@@ -2718,18 +2801,18 @@ namespace firstchain
         {
             // The Reward given to the first block miner is 50, the volume is halved every 210,000 blocks(about 4 years)
             uint Reward = NATIVE_REWARD;
-            while ( index >= REWARD_DIVIDER_CLOCK)
+            while (index >= REWARD_DIVIDER_CLOCK)
             {
                 index -= REWARD_DIVIDER_CLOCK;
                 Reward /= 2;
             }
             return Reward;
- 
+
         }
         public static uint GetCurrencyVolume(uint index)
         {
             uint sum = 0;
-            for (uint i = 1; i < index+1; i++) //< genesis dont produce currency. so we start at 1. 
+            for (uint i = 1; i < index + 1; i++) //< genesis dont produce currency. so we start at 1. 
             {
                 sum += GetMiningReward(i);
             }
@@ -2737,31 +2820,32 @@ namespace firstchain
         }
         public static bool isTxValidforPending(Tx TX, UTXO sUTXO) //< this only verify tx validity with current official utxo set. ( need to verify validity for 
         {
-            bool dustNeeded= false;
+            bool dustNeeded = false;
             if (!VerifyTransactionDataSignature(TxToBytes(TX))) { Console.WriteLine("Invalid Signature"); return false; }
-            if (sUTXO == null) { Console.WriteLine("Invalid UTXO POINTER : utxo not found " + TX.sUTXOP ); return false; }
+            if (sUTXO == null) { Console.WriteLine("Invalid UTXO POINTER : utxo not found " + TX.sUTXOP); return false; }
             if (!ComputeSHA256(TX.sPKey).SequenceEqual(sUTXO.HashKey)) { Console.WriteLine("Invalid UTXO POINTER"); return false; }
-            if ( TX.rUTXOP >= 4 ) {
+            if (TX.rUTXOP >= 4)
+            {
                 UTXO rUTXO = GetOfficialUTXOAtPointer(TX.rUTXOP);
-                if (rUTXO == null) { Console.WriteLine("Invalid UTXO POINTER : "+ TX.rUTXOP); return false; }
+                if (rUTXO == null) { Console.WriteLine("Invalid UTXO POINTER : " + TX.rUTXOP); return false; }
                 if (!TX.rHashKey.SequenceEqual(rUTXO.HashKey)) { Console.WriteLine("Invalid UTXO POINTER" + +TX.rUTXOP); return false; }
             }
-            else { dustNeeded = true;  }
-            if (TX.TokenOfUniqueness != sUTXO.TokenOfUniqueness+1) { Console.WriteLine("Invalid Token"); return false; }  //< this should be compared to a virtual UTXO
-            if ( TX.TxFee < GetFee(sUTXO, dustNeeded)) { Console.WriteLine("Invalid Fee"); return false;  }
+            else { dustNeeded = true; }
+            if (TX.TokenOfUniqueness != sUTXO.TokenOfUniqueness + 1) { Console.WriteLine("Invalid Token"); return false; }  //< this should be compared to a virtual UTXO
+            if (TX.TxFee < GetFee(sUTXO, dustNeeded)) { Console.WriteLine("Invalid Fee"); return false; }
             uint unixTimestamp = (uint)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
-            if ( TX.LockTime < unixTimestamp) { Console.WriteLine("Invalid Timestamp"); return false; } //< should Be COMPARED TO UNIX TIME! 
+            if (TX.LockTime < unixTimestamp) { Console.WriteLine("Invalid Timestamp"); return false; } //< should Be COMPARED TO UNIX TIME! 
             Int64 sold64 = Convert.ToInt64(sUTXO.Sold);
             uint sum = TX.Amount + TX.TxFee;
             Int64 sum64 = Convert.ToInt64(sum);
-            if ( sold64 - sum64 < 0) { return false;  }
+            if (sold64 - sum64 < 0) { return false; }
             return true;
         }
 
         public static void StartMining(byte[] pKey, uint mUTXOP, uint MAXLOCKTIME, uint NTIMES)
         {
-            
-             CleanOldPendingTX(false);
+
+            CleanOldPendingTX(false);
 
             // THIS IS A BASIC MINING STRATEGY (NOT OPTIMIZED) -> 
             /*
@@ -2771,22 +2855,22 @@ namespace firstchain
              */
             uint unixTimestamp = (uint)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
             Block prev = GetBlockAtIndex(RequestLatestBlockIndex(true));
-            if ( prev == null) { return;  }
+            if (prev == null) { return; }
             Console.WriteLine(prev.Index);
             string[] forkfiles = Directory.GetFiles(_folderPath + "fork");
             List<string> okfiles = new List<string>();
-            foreach(string s in forkfiles)
+            foreach (string s in forkfiles)
             {
                 uint latestIndex = RequestLatestBlockIndexInFile(s);
-                uint startIndex = BitConverter.ToUInt32(GetBytesFromFile(4, 8, s),0);
+                uint startIndex = BitConverter.ToUInt32(GetBytesFromFile(4, 8, s), 0);
                 bool OK = true;
-                for (uint i = startIndex; i < latestIndex+1; i++)
+                for (uint i = startIndex; i < latestIndex + 1; i++)
                 {
                     Block b = GetBlockAtIndexInFile(i, s);
-                    if ( b == null) { return; }
-                    foreach ( Tx TX in b.Data)
+                    if (b == null) { return; }
+                    foreach (Tx TX in b.Data)
                     {
-                        if ( TX.LockTime < unixTimestamp + MAXLOCKTIME)
+                        if (TX.LockTime < unixTimestamp + MAXLOCKTIME)
                         {
                             OK = false;
                         }
@@ -2794,7 +2878,7 @@ namespace firstchain
                 }
                 if (OK) { okfiles.Add(s); }
             }
-            if ( okfiles.Count > 0)
+            if (okfiles.Count > 0)
             {
                 uint bestIndex = 0;
                 string longestForkPath = "";
@@ -2837,7 +2921,7 @@ namespace firstchain
                     finalTX.Add(txs[i]);
                 }
                 MineBlock(finalTX, prev, pKey, mUTXOP);
-                prev = GetBlockAtIndexInFile(prev.Index + 1, _folderPath + "winblock"); 
+                prev = GetBlockAtIndexInFile(prev.Index + 1, _folderPath + "winblock");
                 if (prev == null) { Console.WriteLine("err here"); return; }
             }
         }
@@ -2846,7 +2930,7 @@ namespace firstchain
             // Merkle root is build like this : index + ph + datasize + tx + timestamp + minertoken + hashtarget
             uint unixTimestamp = (uint)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
             List<byte> dataBuilder = new List<byte>();
-            dataBuilder = AddBytesToList(dataBuilder, BitConverter.GetBytes(prevBlock.Index+1));
+            dataBuilder = AddBytesToList(dataBuilder, BitConverter.GetBytes(prevBlock.Index + 1));
             dataBuilder = AddBytesToList(dataBuilder, prevBlock.Hash);
             dataBuilder = AddBytesToList(dataBuilder, BitConverter.GetBytes((uint)TXS.Count));
             uint sum = 0;
@@ -2857,11 +2941,11 @@ namespace firstchain
             MinerToken MT = new MinerToken(pKey, mUTXOP, MR);
             dataBuilder = AddBytesToList(dataBuilder, MinerTokenToBytes(MT));
             byte[] HASH_TARGET;
-            if ( isNewTargetRequired(prevBlock.Index+1)) //< will compute with the new hash target 
+            if (isNewTargetRequired(prevBlock.Index + 1)) //< will compute with the new hash target 
             {
                 Block earlier;
 
-                if ( RequestLatestBlockIndex(true) >=  prevBlock.Index +1 - TARGET_CLOCK)
+                if (RequestLatestBlockIndex(true) >= prevBlock.Index + 1 - TARGET_CLOCK)
                 {
                     earlier = GetBlockAtIndex(prevBlock.Index + 1 - TARGET_CLOCK);
                     if (earlier == null) { return; }
@@ -2894,8 +2978,8 @@ namespace firstchain
                     Console.WriteLine("[CONGRATS] YOU MINED A BLOCK!!");
                     Block WinnerBlock = new Block(prevBlock.Index + 1, sha, prevBlock.Hash, TXS, unixTimestamp, MT, HASH_TARGET, nonce);
                     PrintBlockData(WinnerBlock);
-                   // arduino.SendTick("2");
-                    if ( File.Exists(_folderPath + "winblock"))
+                    // arduino.SendTick("2");
+                    if (File.Exists(_folderPath + "winblock"))
                     {
                         OverWriteBytesInFile(0, _folderPath + "winblock", BitConverter.GetBytes(WinnerBlock.Index));
                         AppendBytesToFile(_folderPath + "winblock", BlockToBytes(WinnerBlock));
@@ -2931,21 +3015,21 @@ namespace firstchain
                 return false;
             }
         }
-        
+
         public static UTXO GetOfficialUTXOAtPointer(uint pointer) // CAN RETURN NULL
         {
-            if ( pointer > CURRENT_UTXO_SIZE - 40 || pointer <  4) { return null; }
+            if (pointer > CURRENT_UTXO_SIZE - 40 || pointer < 4) { return null; }
             return BytesToUTXO(GetBytesFromFile(pointer, 40, _folderPath + "utxos"));
-        
+
         }
         //------------------------ BLOCKCHAIN ---------------------
         public static Block GetBlockAtIndexInFile(uint pointer, string filePath) // Return a null Block if CANT BE BE FOUND
         {
             uint byteOffset = 4;
-           // Console.WriteLine("want to get " + filePath);
+            // Console.WriteLine("want to get " + filePath);
             uint fileLength = (uint)new FileInfo(filePath).Length;
             if (fileLength < 76) { return null; }
-            while (true) 
+            while (true)
             {
                 if (BitConverter.ToUInt32(GetBytesFromFile(byteOffset, 4, filePath), 0) == pointer)
                 {
@@ -2955,16 +3039,16 @@ namespace firstchain
                     byteOffset -= 68;
                     if (fileLength < byteOffset + 72 + (dsb * 1100) + 80) { Console.WriteLine("byte missing in file"); return null; }
                     byte[] bytes = GetBytesFromFile(byteOffset, 72 + (dsb * 1100) + 80, filePath);
-                    return BytesToBlock(bytes); 
+                    return BytesToBlock(bytes);
                 }
                 byteOffset += 68;
                 uint ds = BitConverter.ToUInt32(GetBytesFromFile(byteOffset, 4, filePath), 0);
                 byteOffset -= 68;
                 byteOffset += 72 + (ds * 1100) + 80;
-                if (fileLength < byteOffset + 72) {  return null; }
+                if (fileLength < byteOffset + 72) { return null; }
             }
         }
-        public static Tuple<uint[],string> GetBlockPointerAtIndex(uint pointer) //< will return a Tuple  
+        public static Tuple<uint[], string> GetBlockPointerAtIndex(uint pointer) //< will return a Tuple  
         {
 
             string[] files = Directory.GetFiles(_folderPath + "blockchain");
@@ -2996,7 +3080,7 @@ namespace firstchain
                     if (fileLength < byteOffset + 72 + (dsb * 1100) + 80) { return null; }
 
                     return new Tuple<uint[], string>(new uint[2] { byteOffset, byteOffset + 72 + (dsb * 1100) + 80 }, filePath);
-                    
+
                 }
                 byteOffset += 68;
                 uint ds = BitConverter.ToUInt32(GetBytesFromFile(byteOffset, 4, filePath), 0);
@@ -3008,26 +3092,26 @@ namespace firstchain
         }
         public static Block GetBlockAtIndex(uint pointer) //< --- return a specific block at index. Fork NOT Included! Return a null Block if CANT BE BE FOUND
         {
-       
+
             string[] files = Directory.GetFiles(_folderPath + "blockchain");
             List<uint> flist = new List<uint>();
             foreach (string s in files) { flist.Add(Convert.ToUInt32(Path.GetFileName(s))); }
             flist.Sort();
 
             string filePath = "";
-            foreach(uint a in flist)
+            foreach (uint a in flist)
             {
                 uint lastIndex = RequestLatestBlockIndexInFile(_folderPath + "blockchain\\" + a.ToString());
-                if ( lastIndex >= pointer)
+                if (lastIndex >= pointer)
                 {
                     filePath = _folderPath + "blockchain\\" + a.ToString();
                     break;
                 }
             }
-            if (filePath.Length == 0 ) { return null;  }
+            if (filePath.Length == 0) { return null; }
             uint byteOffset = 4;
             uint fileLength = (uint)new FileInfo(filePath).Length;
-            if ( fileLength < 76) { return null;  }
+            if (fileLength < 76) { return null; }
             while (true)
             {
                 if (BitConverter.ToUInt32(GetBytesFromFile(byteOffset, 4, filePath), 0) == pointer)
@@ -3035,28 +3119,28 @@ namespace firstchain
                     byteOffset += 68;
                     uint dsb = BitConverter.ToUInt32(GetBytesFromFile(byteOffset, 4, filePath), 0);
                     byteOffset -= 68;
-                    if (fileLength < byteOffset + 72 + (dsb * 1100) + 80 ) { return null; }
+                    if (fileLength < byteOffset + 72 + (dsb * 1100) + 80) { return null; }
                     return BytesToBlock(GetBytesFromFile(byteOffset, 72 + (dsb * 1100) + 80, filePath));
                 }
                 byteOffset += 68;
                 uint ds = BitConverter.ToUInt32(GetBytesFromFile(byteOffset, 4, filePath), 0);
                 byteOffset -= 68;
                 byteOffset += 72 + (ds * 1100) + 80;
-                if (fileLength < byteOffset + 72 ) { return null; } 
+                if (fileLength < byteOffset + 72) { return null; }
             }
-           
+
         }
-        
+
         public static string GetLatestBlockChainFilePath() //<---- return latest official blockchain file
         {
-           
+
             string[] files = Directory.GetFiles(_folderPath + "blockchain");
             List<uint> flist = new List<uint>();
             foreach (string s in files) { flist.Add(Convert.ToUInt32(Path.GetFileName(s))); }
             flist.Sort();
             return _folderPath + "blockchain\\" + flist[flist.Count - 1].ToString();
         }
-        public static string GetIndexBlockChainFilePath(uint pointer ) //<---- return a filepath Official Only !
+        public static string GetIndexBlockChainFilePath(uint pointer) //<---- return a filepath Official Only !
         {
 
             string[] files = Directory.GetFiles(_folderPath + "blockchain");
@@ -3081,7 +3165,7 @@ namespace firstchain
             if (onlyOfficial)
             {
                 string s = GetLatestBlockChainFilePath();
-                if ( new FileInfo(s).Length < 4) { Console.WriteLine("file wrong format");  return uint.MaxValue;  }
+                if (new FileInfo(s).Length < 4) { Console.WriteLine("file wrong format"); return uint.MaxValue; }
                 return BitConverter.ToUInt32(GetBytesFromFile(0, 4, s), 0);
             }
             else
@@ -3090,7 +3174,7 @@ namespace firstchain
                 string sp = GetLatestBlockChainFilePath();
                 if (new FileInfo(sp).Length < 4) { Console.WriteLine("file wrong format"); return uint.MaxValue; }
                 uint highest_BlockIndex = BitConverter.ToUInt32(GetBytesFromFile(0, 4, sp), 0); //< create an infinite loop .... 
-                foreach ( string s in files)
+                foreach (string s in files)
                 {
                     if (new FileInfo(s).Length < 4) { Console.WriteLine("file wrong format"); return uint.MaxValue; }
                     uint currentIndex = BitConverter.ToUInt32(GetBytesFromFile(0, 4, s), 0);
@@ -3101,7 +3185,7 @@ namespace firstchain
                 }
                 return highest_BlockIndex;
             }
-           
+
         }
         public static uint RequestLatestBlockIndexInFile(string _filePath) // can do an error
         {
@@ -3146,8 +3230,8 @@ namespace firstchain
             return fee;
         }
 
-        
-        
+
+
         //------------------------ WALLET     ---------------------
 
 
@@ -3171,7 +3255,7 @@ namespace firstchain
 
         }
 
-        public static void SetUpTx(string _sprkey, string _spukey, uint sutxop, uint amount, string _rpukey, uint rutxop, uint fee, uint locktime )
+        public static void SetUpTx(string _sprkey, string _spukey, uint sutxop, uint amount, string _rpukey, uint rutxop, uint fee, uint locktime)
         {
             //newtx sprkey: spukey: sutxop: amount: rpukey: rutxop: fee:
             byte[] _MyPublicKey = File.ReadAllBytes(_spukey);
@@ -3181,35 +3265,35 @@ namespace firstchain
             byte[] rUTXOPointer = BitConverter.GetBytes(rutxop);
             byte[] FEE = BitConverter.GetBytes(fee);
             byte[] LockTime = BitConverter.GetBytes(locktime);
-            if ( sutxop == 0) { Console.WriteLine("bad pointer");  return; }
+            if (sutxop == 0) { Console.WriteLine("bad pointer"); return; }
             UTXO utxo = GetOfficialUTXOAtPointer(sutxop);
-            if ( utxo == null) { Console.WriteLine("bad pointer"); return;  }
-            if (!utxo.HashKey.SequenceEqual(ComputeSHA256(_MyPublicKey))) { Console.WriteLine("bad pointer"); return;  }
+            if (utxo == null) { Console.WriteLine("bad pointer"); return; }
+            if (!utxo.HashKey.SequenceEqual(ComputeSHA256(_MyPublicKey))) { Console.WriteLine("bad pointer"); return; }
             uint newtou = utxo.TokenOfUniqueness + 1;
             byte[] TOU = BitConverter.GetBytes(newtou);
             bool needDust = false;
-            if ( rutxop != 0)
+            if (rutxop != 0)
             {
                 UTXO oUTXO = GetOfficialUTXOAtPointer(rutxop);
-                if ( oUTXO == null) { Console.WriteLine("bad pointer"); return;  }
+                if (oUTXO == null) { Console.WriteLine("bad pointer"); return; }
             }
-            else { needDust = true;  }
-            if ( GetFee(utxo, needDust) > fee )
+            else { needDust = true; }
+            if (GetFee(utxo, needDust) > fee)
             {
                 Console.WriteLine("insuffisiant fee");
                 return;
             }
-            if ( fee + amount > utxo.Sold) { Console.WriteLine("insuffisiant sold"); return;  }
+            if (fee + amount > utxo.Sold) { Console.WriteLine("insuffisiant sold"); return; }
             //           if ( TX.TxFee < GetFee(sUTXO, dustNeeded)) { Console.WriteLine("Invalid Fee"); return false;  }
             // uint sum = TX.Amount + TX.TxFee;
             CreateTxFile(_sprkey, _MyPublicKey, Coinamount, LockTime, sUTXOPointer, rUTXOPointer, TOU, FEE, _hashOthPublicKey);
-            
+
         }
 
 
         public static void CreateTxFile(string _MyPrivateKey, byte[] _MyPublicKey, byte[] Coinamount, byte[] LockTime, byte[] sUTXOPointer, byte[] rUTXOPointer, byte[] TOU, byte[] FEES, byte[] _hashOthPublicKey)
         {
-         
+
             RSACryptoServiceProvider _MyPrRsa = new RSACryptoServiceProvider();
             try
             {
@@ -3218,15 +3302,15 @@ namespace firstchain
                 /*
                 public Tx (byte[] spk, uint amount, byte[] rpk, uint locktime, uint spkP, uint rpkP, uint TOU, uint Fee, byte[] sign )
              */
-                DataBuilder = AddBytesToList(DataBuilder, _MyPublicKey); 
+                DataBuilder = AddBytesToList(DataBuilder, _MyPublicKey);
                 DataBuilder = AddBytesToList(DataBuilder, Coinamount);
                 DataBuilder = AddBytesToList(DataBuilder, _hashOthPublicKey);
-                DataBuilder = AddBytesToList(DataBuilder, LockTime); 
-                DataBuilder = AddBytesToList(DataBuilder, sUTXOPointer); 
+                DataBuilder = AddBytesToList(DataBuilder, LockTime);
+                DataBuilder = AddBytesToList(DataBuilder, sUTXOPointer);
                 DataBuilder = AddBytesToList(DataBuilder, rUTXOPointer);
-                DataBuilder = AddBytesToList(DataBuilder, TOU); 
-                DataBuilder = AddBytesToList(DataBuilder, FEES); 
-                
+                DataBuilder = AddBytesToList(DataBuilder, TOU);
+                DataBuilder = AddBytesToList(DataBuilder, FEES);
+
                 // + sign
 
                 byte[] UnsignedData = ListToByteArray(DataBuilder);
@@ -3235,16 +3319,16 @@ namespace firstchain
                 DataBuilder = AddBytesToList(DataBuilder, Signature); //< add the signature to the bytearray...
                 byte[] SignedData = ListToByteArray(DataBuilder);
 
-                if ( !VerifyTransactionDataSignature(SignedData))
+                if (!VerifyTransactionDataSignature(SignedData))
                 {
                     Console.Write("Wrong Signature. Bad Input");
                     return;
-                    
+
                 }
-                    
-                string fileName = _folderPath + "TX" + BitConverter.ToUInt32(TOU,0).ToString();
+
+                string fileName = _folderPath + "TX" + BitConverter.ToUInt32(TOU, 0).ToString();
                 File.WriteAllBytes(fileName, SignedData);
-                Console.WriteLine("Tx" + BitConverter.ToUInt32(TOU,0) + "file was successfully generated at roots. Signature :" + SHAToHex(Signature, false));
+                Console.WriteLine("Tx" + BitConverter.ToUInt32(TOU, 0) + "file was successfully generated at roots. Signature :" + SHAToHex(Signature, false));
                 _MyPrRsa.Clear();
                 return;
             }
@@ -3259,7 +3343,7 @@ namespace firstchain
 
         public static bool VerifyTransactionDataSignature(byte[] dataBytes)
         {
-            if ( dataBytes.Length != 1100) { return false; }
+            if (dataBytes.Length != 1100) { return false; }
 
             byte[] mPKey = new byte[532];
             byte[] msg = new byte[588];
@@ -3295,5 +3379,5 @@ namespace firstchain
         }
     }
 
-   
+
 }
