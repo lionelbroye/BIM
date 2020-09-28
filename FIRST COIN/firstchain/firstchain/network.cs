@@ -58,7 +58,7 @@ namespace firstchain
                 var stream = client.GetStream();
 
                 byte[] bytes = new byte[BUFFER_CHUNK]; //< we can change the buffer ! 
-                uint current_packet_id = 0;
+                string current_packet_id = "0";
                 byte data_flag = 0;
                 uint file_length = 0;
                 uint byteOffset = 0;
@@ -80,8 +80,14 @@ namespace firstchain
                             (4 bytes) PACKET ID
                             (...) data
                          */
-                        uint pId = BitConverter.ToUInt32(new byte[4] { bytes[0], bytes[1], bytes[2], bytes[3] }, 0);
-                        if (pId != current_packet_id && pId > 0 ) // pID
+                        byte[] pIDbytes = new byte[32];
+                        for (int n = 9; n < 41; n++)
+                        {
+                            pIDbytes[n - 9] = bytes[n];
+                        }
+                        string pId = Program.SHAToHex(pIDbytes, false);
+                        //string pId = BitConverter.ToUInt32(new byte[4] { bytes[0], bytes[1], bytes[2], bytes[3] }, 0);
+                        if (pId != current_packet_id && pId != "0") // pID
                         {
                             /*
                             // clean files containing pID in dll folder... 
@@ -98,7 +104,7 @@ namespace firstchain
                                 Console.WriteLine("will delete files with " + pId.ToString());
                             }
                             */
-                            Program.dlRemovalQueue.Add(pId); 
+                            Program.dlRemovalQueue.Add(pId);
                             current_packet_id = pId;
                             data_flag = bytes[4];
                             file_length = BitConverter.ToUInt32(new byte[4] { bytes[5], bytes[6], bytes[7], bytes[8] }, 0);
@@ -127,7 +133,7 @@ namespace firstchain
                                         Program.PendingDLTXs.Add(current_packet_id);
                                         break;
                                 }
-                                current_packet_id = 0; // init cpaket id to avoid erasing it! 
+                                current_packet_id = "0"; // init cpaket id to avoid erasing it! 
                             }
                             else
                             {
@@ -167,7 +173,7 @@ namespace firstchain
                                         {
                                             Program.PendingDLBlocks.Add(current_packet_id);
                                         }
-                                        
+
                                         break;
                                     case 2:
                                         if (!Program.PendingDLTXs.Contains(pId))
@@ -179,7 +185,7 @@ namespace firstchain
                                 }
 
 
-                                current_packet_id = 0; // init cpaket id to avoid erasing it! 
+                                current_packet_id = "0"; // init cpaket id to avoid erasing it! 
                             }
                             else
                             {
@@ -217,7 +223,7 @@ namespace firstchain
         }
 
         public List<ExtendedPeer> mPeers; //< list of all of my peers! 
-        
+
         public class ExtendedPeer
         {
             public TcpClient Peer { get; set; }
@@ -235,7 +241,7 @@ namespace firstchain
 
         public void Initialize()
         {
-            mPeers= new List<ExtendedPeer>();
+            mPeers = new List<ExtendedPeer>();
             string[] netinfos = File.ReadAllLines(AppDomain.CurrentDomain.BaseDirectory + "\\peers.txt");
             if (netinfos.Length < 1)
             {
@@ -281,7 +287,7 @@ namespace firstchain
                 }
             }
 
-            mPeers.Add(new ExtendedPeer(client,server,port));
+            mPeers.Add(new ExtendedPeer(client, server, port));
 
         }
         public void SendData(byte[] data, int peerIndex) //<  send data to a peer! 
@@ -303,9 +309,9 @@ namespace firstchain
                 {
                     if (!Program.peerRemovalQueue.Contains(mPeers[peerIndex].IP))
                     {
-                        Program.peerRemovalQueue.Add(mPeers[peerIndex].IP); 
+                        Program.peerRemovalQueue.Add(mPeers[peerIndex].IP);
                     }
-                   
+
                     /*
                     mPeers[peerIndex].Peer.Close();
                     // try to reconnect to him!
@@ -346,7 +352,7 @@ namespace firstchain
                             (4 bytes) PACKET ID
                             (...) data
             */
-            
+
             mPeers[i].currentlySending = true;
             uint unixTimestamp = (uint)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
             uint fLength = (uint)new FileInfo(_fPath).Length; // THIS CAN CAUSE A PROB ! 
@@ -371,10 +377,10 @@ namespace firstchain
             {
                 DataBuilder = Program.AddBytesToList(DataBuilder, Program.GetBytesFromFile(byteOffset, BUFFER_CHUNK - 41, _fPath));
                 SendData(Program.ListToByteArray(DataBuilder), i);
-                byteOffset += BUFFER_CHUNK - 41; 
+                byteOffset += BUFFER_CHUNK - 41;
             }
             //byte[] data;
-            while (byteOffset < fLength )
+            while (byteOffset < fLength)
             {
                 DataBuilder = new List<byte>();
                 DataBuilder = Program.AddBytesToList(DataBuilder, BitConverter.GetBytes(unixTimestamp));
@@ -465,8 +471,9 @@ namespace firstchain
             }
 
             fLength += (uint)new FileInfo(fileEnd).Length - offsetEnd;
-            fLength += 4; // we will include header! 
-            byte[] checksum = new byte[32]; // we dont compute the hash here. It was a bad idea... too slow.. 
+            fLength += 4; // we will include header!
+            uint unixTimestampB = (uint)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalMilliseconds;
+            byte[] checksum = Program.ComputeSHA256(BitConverter.GetBytes(unixTimestampB));
 
             List<byte> DataBuilder = new List<byte>();
             DataBuilder = Program.AddBytesToList(DataBuilder, BitConverter.GetBytes(unixTimestamp));
@@ -535,7 +542,7 @@ namespace firstchain
 
 
         }
-    
+
     }
 
 }
