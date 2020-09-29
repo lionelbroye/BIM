@@ -10,8 +10,10 @@ namespace firstchain
     class PixelWrapper 
     {
         /*
-         PROBLEME ACTUEL LE MINING REWARD NEST PAS MIS A JOUR....
-
+              * For reducing calculation in block proccessing, we have to lower the amount ok pixel transaction in block depending
+              * of UPO they mentionnened. We think about a new value which is call GAS. 
+              * 1 000 000 GAS are usable per block proccessing. or something like this. 
+              * Mentionning an UPO that possess 1 000 000 pixels use 1 000 000 GAS. 
          */
         /*
          *  En admettant que le monochrome est de taille 50x50 pix alors 2500 pixels serait en circulation sur le marché. 
@@ -111,32 +113,30 @@ namespace firstchain
             {
                 upo = GetOfficialUPO(pex.Index, pex.hPKey);
             }
-            if (pex.ExtractionZone[0].X < pex.ExtractionZone[1].X) { return exPixels; }
-            if (pex.ExtractionZone[0].Y < pex.ExtractionZone[1].Y) { return exPixels; }
-
-            for (int x = pex.ExtractionZone[0].X; x <= pex.ExtractionZone[1].X; x++)
+            if (pex.ExtractionZone[0].X > pex.ExtractionZone[1].X) { return exPixels; }
+            if (pex.ExtractionZone[0].Y > pex.ExtractionZone[1].Y) { return exPixels; }
+            foreach ( Pixel pix in upo.Pixels)
             {
-                for (int y = pex.ExtractionZone[0].Y; y <= pex.ExtractionZone[1].Y; y++)
+                if ( pix.BlocIndex == pex.BlocIndex && pix.PixTXIndex == pex.BlocTX &&
+                    pix.position.X >= pex.ExtractionZone[0].X && pix.position.X < pex.ExtractionZone[1].X &&
+                    pix.position.Y >= pex.ExtractionZone[0].Y && pix.position.Y < pex.ExtractionZone[1].Y)
                 {
-                    foreach(Pixel pix in upo.Pixels)
+                    if (!exPixels.Contains(pix))
                     {
-                        if ( pix.BlocIndex == pex.Index && pix.PixTXIndex == pex.BlocTX && pix.position.X == x && pix.position.Y == y)
-                        {
-                            // you can't add multiple times the same pixel so ... 
-                            if (!exPixels.Contains(pix))
-                            {
-                                exPixels.Add(pix);
-                            }
-                        }
+                        exPixels.Add(pix);
                     }
                 }
             }
+            
             return exPixels;
         }
         public static uint GetValueFromPixels(List<Pixel> pixs)
         {
+            if ( pixs.Count == 0) { return 0; } 
+           // what is value? price per unit? 
+            uint value_per_unit = pixs[0].Value; 
 
-            return 0; 
+            return (uint)(value_per_unit * pixs.Count); 
         }
         public static Pixel UpdatePixel(Pixel pix, uint newval, uint BlockID, uint TXID, Vector offset)
         {
@@ -443,7 +443,7 @@ namespace firstchain
                 }
                 byteOffset += 20;
                 Pixel pix = BytesToPixel(pixelBytes);
-                if (pix == null) { Console.WriteLine("oh shit"); return null; }
+                if (pix == null) { return null; }
                 Pixels.Add(pix);
             }
             return new UPO(HashKey, BitConverter.ToUInt32(TokenOfUniqueness, 0), BitConverter.ToUInt32(Sold, 0), Pixels); 
@@ -1311,7 +1311,9 @@ namespace firstchain
             {
                 if ( pex.ExtractionZone.Length != 2) { Console.WriteLine("Invalid Extraction Zone format!"); return false; }
                 List<Pixel> pixs = GetAllPixelsFromExtraction(pex, UPOcache);
-                sumpixvalue += GetValueFromPixels(pixs);
+                uint currvalue = GetValueFromPixels(pixs);
+                if ( currvalue == 0) { Console.WriteLine("No Pixel in Extraction Zone !"); return false; }
+                sumpixvalue += currvalue;
             }
             if (ptx.TxFee < Program.GetFee(upo)) { Console.WriteLine("Invalid Fee"); return false; }
             Int64 sold64 = Convert.ToInt64(upo.Sold);
