@@ -13,33 +13,8 @@ using System.Threading;
 namespace firstchain
 {
     /*
-     * Gerer les empreintes de fichiers lors de l'upload 
-     * --> produire un ID unique! ex : mon empreinte unix + le nombre d'envoie dans la seconde ( faire un thread qui reset scompteur chaque seconde )
-     * 
-     * Gestion des fichier TX ( inscrire une TX si seulement elle n'existe pas dans notre PTX file . 
-     * 
-     * Test des bonnes receptions de transactions dans le reseau et validation dans les blocs.... 
-     * 
-     * pixel transaction structure d'objet
-     * 
-     * hash de ma clé publique 
-     * pointeur de ma clé publique
-     * token d'unicité
-     * nombre d'extraction
-     * liste d'extraction
-     * frais de transaction
-     * signature ( de tout ce qui precede ) avec ma clé privé
-     * 
-     * extraction de pixel structure d'objet:           --------> (60 octets)
-     * hash de la clé publique du possesseur des pixels --------> (32 octets)
-     * pointeur de sa clé publique                      --------> (4 octets)
-     * zone dextraction [0,0] [1,1] ( 2 vecteurs )      --------> (16 octets) | 4 entiers signé 32bit
-     * offset ( vecteur )                               --------> (8 octets)  | 2 entiers signé 32bit
-     * 
-     * anuaire des pixels structures : 
-     * 
-  
-     * 
+     * Revoir la gestion des fichiers ( temp dl concat && proccess ) dans le main loop ( nullexception et outofrangeexception se produit par moment )
+     * Pour l'instant c'est toléré dans un try catch de la fonction Main(). a rendre propre.  
      */
     class Program
     {
