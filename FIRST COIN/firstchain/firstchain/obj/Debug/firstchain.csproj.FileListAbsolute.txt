@@ -1,7 +1,0 @@
-C:\Users\Gaël\source\repos\firstchain\firstchain\bin\Debug\firstchain.exe.config
-C:\Users\Gaël\source\repos\firstchain\firstchain\bin\Debug\firstchain.exe
-C:\Users\Gaël\source\repos\firstchain\firstchain\bin\Debug\firstchain.pdb
-C:\Users\Gaël\source\repos\firstchain\firstchain\obj\Debug\firstchain.csprojAssemblyReference.cache
-C:\Users\Gaël\source\repos\firstchain\firstchain\obj\Debug\firstchain.csproj.CoreCompileInputs.cache
-C:\Users\Gaël\source\repos\firstchain\firstchain\obj\Debug\firstchain.exe
-C:\Users\Gaël\source\repos\firstchain\firstchain\obj\Debug\firstchain.pdb
