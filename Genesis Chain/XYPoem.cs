@@ -558,8 +558,20 @@ namespace firstchain
                 }
             }
         }
-
+                //-_-_-_-_-_-_-_-_-_-_ Pour basile -_-_-_-_-_-_-_-_-_-_-_
+        
         public static string[] UTF8_CHAR_SVG_PATHS = new string[256]; // A REMPLIR...
+        public static void SetUpCharPaths(){
+            
+            // voir ici https://www.utf8-chartable.de/ . Commencer a 41 ... 
+            // a remplir ici , exemple ->
+            UTF8_CHAR_SVG_PATHS[41] = "ici le char path du A Majuscule"; 
+            UTF8_CHAR_SVG_PATHS[66] = "ici le char path du f Minuscule";
+            
+            // etc... 
+            //sinon tu peux definir directement larray a l'initisalisation en utilisant des brackets (mais il faut definir les 256 valeurs,
+            // c'estt comme tu voix
+        }
 
         /*-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_- SOME POEMS HIDDEN IN BLOCK TRANSACTIONS -_-_-_-_-_-_-_-_-_-_-_-_*/
 
@@ -587,7 +599,8 @@ namespace firstchain
             // TODO
             foreach ( char c in Poem.ToCharArray())
             {
-                poemPaths.Add(UTF8_CHAR_SVG_PATHS[(byte)c]);
+                if ( UTF8_CHAR_SVG_PATHS[(byte)c] != "" ) // some security to avoid print trash
+                    poemPaths.Add(UTF8_CHAR_SVG_PATHS[(byte)c]);
             }
             foreach ( string s in poemPaths)
             {
@@ -696,18 +709,18 @@ namespace firstchain
         public static SerialPort sp_XY;
         public static Thread RCV_PLOTTER;
         public static Thread SND_PLOTTER;
-        public static bool _Busy = false; // le plotter est en train de faire des trucs
+        public static bool _Busy = false; 
 
         public static void ConfigurePort()
         {
             string[] ports = SerialPort.GetPortNames();
-            Console.WriteLine("Voici la liste des ports utilisables : ");
+            Console.WriteLine("List of usable ports : ");
             foreach (string s in ports)
             {
                 Console.Write(s + " / ");
             }
             Console.WriteLine("");
-            Console.WriteLine("Veuillez taper le nom du port connecté au plotter : ");
+            Console.WriteLine("Please type port name connected to plotter : ");
 
             while (true)
             {
@@ -718,16 +731,16 @@ namespace firstchain
                     sp_XY = new SerialPort(portName, 115200);
                     sp_XY.Open();
                     sp_XY.ReadTimeout = 100;
-                    Console.WriteLine("Port  " + portName + " ouvert.");
+                    Console.WriteLine("Port  " + portName + " opened.");
                     break;
                 }
                 catch
                 {
                     if (!Program.ValidYesOrNo("")) { return; }
-                    Console.WriteLine("Erreur à l'ouverture du port.");
+                    Console.WriteLine("Opening Port Failed.");
                 }
             }
-
+            SetUpCharPaths();
             AppDomain.CurrentDomain.ProcessExit += new EventHandler(OnProcessExit);
             RCV_PLOTTER = new Thread(new ThreadStart(Receive_XY_Data));
             RCV_PLOTTER.IsBackground = true;
@@ -771,7 +784,7 @@ namespace firstchain
             while (true)
             {
                 if (_Busy)
-                    Thread.Sleep(1000);
+                    Thread.Sleep(10); // just a security. probably not necessary
                 else
                 {
                     if (MsgQueue.Count > 0)
@@ -819,31 +832,6 @@ namespace firstchain
                 MsgQueue.Add("M1 " + PEN_UP.ToString());
             }
         }
-
-        // SVG PATH RAW DATA HERE
-
-        // eg : un cercle et un triangle...
-        
-        /*
-        static void Main(string[] args)
-        {
-            //  ConfigurePort(); // ouvre le port serie et lance les threads de comm
-
-
-            // exemple lancer test impression
-            List<List<Point>> pts = GetPointListsFromSVGPath(test_SVG, false);
-            pts = NormalizeListForPlotterDimension(pts, 200, true);
-            pts = RawScaleListOfPoints(pts, 4, 4, true); // aggrandit x2 la liste de points
-            pts = RawScaleListOfPoints(pts, 0.5f, 1, true);
-            pts = ApplyOffsetToPointsList(pts, new Point(50, 50), true);
-            //  LoadPointsToMsgQueue(pts);
-
-        
-            while (true) { }
-
-        }
-
-        */
 
 
         static List<List<Point>> ApplyOffsetToPointsList(List<List<Point>> points, Point offset, bool _debug = false)
