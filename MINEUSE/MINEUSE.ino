@@ -274,6 +274,7 @@ uint32_t RequestLatestBlockIndex(){
   SFILE = SD.open("blockchain", FILE_WRITE); // genesis file is 113 o
   unsigned long fsize = SFILE.size();
   fsize /= 4 ;
+  if ( fsize >  1) fsize --; // give the index starting from 0
   return (uint32_t) fsize;  
 }
 // some verif for blocks ( because we cant load in ram ... ) 
@@ -294,8 +295,14 @@ void GetHashAtBlockIndex(uint32_t index, byte *buff ){
    
 }
 
-void GetMiningReward(uint32_t latestIndex){
-
+uint32_t GetMiningReward(uint32_t Index){
+  uint32_t Reward = 50; // NATIVE REWARD
+  while (Index >= 210000) // REWARD_DIVIDER_CLOCK
+  {
+        Index -= 210000;
+        Reward /= 2;
+   }
+   return Reward;
   
 }
 void Mine(byte *pkey, uint32_t utxop){
@@ -321,20 +328,20 @@ void Mine(byte *pkey, uint32_t utxop){
   for (i = 0 ; i < 32; i++ ) { nextblock[byteOffset] = hash[i]; byteOffset++;} // the prevhash
   nextblock[byteOffset] = 0; byteOffset++; // 0 for the tx numb because we dont give a shit
   UINT32toBytes(0, uintbuff ); //zeroing timestamp because its not clear for bimer
-  for (i = 0 ; i < 4; i++ ) { nextblock[byteOffset] = 0; byteOffset++;}// timeStamp? : equal to 0 probably
+  for (i = 0 ; i < 4; i++ ) { nextblock[byteOffset] = uintbuff[i]; byteOffset++;}// timeStamp? : equal to 0 probably
   //--> miner token 
   for (i = 0 ; i < 32; i++ ) { nextblock[byteOffset] = pkey[i]; byteOffset++;} // pkey 
   UINT32toBytes(utxop,uintbuff); 
   for (i = 0 ; i < 4; i++ ) { nextblock[byteOffset] = uintbuff[i]; byteOffset++;} // utxo pointer 
   // coin reward 
-   UINT32toBytes(50,uintbuff);  // just big shit we use 50 for the moment LOL
+   UINT32toBytes(GetMiningReward(u),uintbuff);  // we do 50 
   for (i = 0 ; i < 4; i++ ) { nextblock[byteOffset] = uintbuff[i]; byteOffset++;} // mining  reward 
   // now do the hash of all of this 
   uint8_t *merkleroot; // same as byte ( unsigned 8 bit ...
-  sha.write(merkleroot,520);
+  sha.write(nextblock,81);
   merkleroot = sha.result();
   // rebuild it 
-  byte winnerblock[132];
+  byte winnerblock[113];
   byteOffset = 0;
   for (i = 0 ; i < 4; i++ ) { winnerblock[byteOffset] = nextblock[i]; byteOffset++;}
   for (i = 0 ; i < 32; i++ ) { winnerblock[byteOffset] = merkleroot[i]; } // no inc byteoffset here
