@@ -61,7 +61,10 @@ void printHash(uint8_t* hash) {
   :: index -> hash -> previoushash -> txnumb (max numb for atmega328p needed)-> txs -> timestamp??? -> MinerToken -> HT??? -> Nonce ???
   4     -> 32   -> 32           -> 1                                    -> ?*152 ->  4???       ->  40   ->  ???  -> ???
   */
-  
+  // new stuff : block file are fixed size. there is one blockchain file which can get bigger. But every block are fixed size. Tx limit per block
+  // is 4000 
+  // there is a new file. the "blockpointers" file. every new block, a new uint is written in it. it contains the pointer of the block newly wriiten.
+    
 #include <SPI.h>
 #include <SD.h>
 #include "sha256.h"
@@ -94,25 +97,83 @@ bool InitializeSD(){
   return true;
 
 }
-void CheckFilesAtRoot(){
+void printDirectory(File *dir, int numTabs) { // will return the number of gile 
 
-  // create 
-  if (!SD.exists("genesis")){
-    Serial.println("creating genesis...");
-    CreateGenesis();
-    if ( SD.exists("genesis")){
-      Serial.println("genesis file OK ");
+  while (true) {
+
+    File entry =  dir.openNextFile();
+
+    if (! entry) {
+      // no more files
+      break;
     }
+    Serial.print(entry.name());
+    entry.close();
+  }
+}
+void CheckFilesAtRoot(){
+  
+   // blockchain folder check 
+  if (!SD.exists("blockchain")){
+      CreateGenesis();
+  }
+  if (!SD.exists("blockpointers")){
+     SFILE = SD.open("blockpointers", FILE_WRITE); 
+    SFILE.seek(EOF);
+    byte uintbuff[4];
+    UINT32toBytes(0, uintbuff ); // writting pointer of the genesis
+    SFILE.write(uintbuff, 4);
+    SFILE.close();
+  }
+  // utxo set file check 
+  if (!SD.exists("utxos")){
+    Serial.println("creating utxo set...");
+    SFILE = SD.open("utxos", FILE_WRITE); 
+    SFILE.seek(EOF);
+    byte uintbuff[4];
+    UINT32toBytes(50, uintbuff ); // currency volume is 50. cause genesis produce first 50 coin?
+    SFILE.write(uintbuff, 4);
+    SFILE.close();
   }
   else{
-    Serial.println("genesis file OK");
+    Serial.println("utxo set file OK");
+  }
+ 
+  // fork chain folder check 
+  if (!SD.exists("fork")){
+    SD.mkdir("fork"); 
+  }
+  // ptx
+  if (!SD.exists("ptx")){
+    Serial.println("creating pending transaction file...");
+    SFILE = SD.open("ptx", FILE_WRITE); 
+    SFILE.close();
+  }
+  else{
+    Serial.println("pending transaction file OK");
   }
 }
 
-void ClearAllFiles(){
-  if (SD.exists("genesis")){
-      SD.remove("genesis");
+void Initchain(){
+  
+   if (SD.exists("blockchain")){
+    Serial.println("deleting blockchain file...");
+    SFILE = SD.remove("blockchain", FILE_WRITE); 
   }
+  if (SD.exists("ptx")){
+    Serial.println("deleting pending transaction file...");
+    SFILE = SD.remove("ptx", FILE_WRITE); 
+  }
+  if (SD.exists("utxos")){
+    Serial.println("deleting utxo set file...");
+    SFILE = SD.remove("utxos", FILE_WRITE); 
+  }
+  if (SD.exists("blockpointers")){
+    Serial.println("deleting blockpointers file...");
+    SFILE = SD.remove("blockpointers", FILE_WRITE); 
+  }
+  // deleting all fork before remove the dir 
+  // deleting all net before remove the dir 
   
 }
 uint32_t BytesToUint(byte *arr ){
@@ -135,14 +196,14 @@ void UINT32toBytes(uint32_t v, byte *a ){ // we dont need a return or something.
 void Test_PrintGenesisUTXOPAndMiningReward(){
 
 
-  SFILE = SD.open("genesis", FILE_WRITE); // genesis file is 113 o
+  SFILE = SD.open("blockchain", FILE_WRITE); // genesis file is 113 o
   unsigned long fsize = SFILE.size();
   SFILE.seek(109); // go to last 4 bytes... 
   byte uintbuff[4];
   SFILE.read(uintbuff,4);
   SFILE.close();
   uint32_t reward = BytesToUint(uintbuff); 
-  Serial.println("GENESIS SIZE = " + String(fsize) + " and miner reward is " + String(reward));
+  Serial.println("BLOCKCHAIN SIZE = " + String(fsize) + " and miner reward is " + String(reward));
   
 }
 
@@ -196,8 +257,8 @@ void CreateGenesis(){
   UINT32toBytes(50, uintbuff );
   for (i = 0 ; i < 4; i++ ) { genesis[byteOffset] = uintbuff[i]; byteOffset++;}// utxop
   Serial.println(byteOffset);
-  // append all those bytes to genesis file on sd card
-  SFILE = SD.open("genesis", FILE_WRITE); 
+  // append all those bytes to blockchain/0 file on sd card
+  SFILE = SD.open("blockchain", FILE_WRITE); 
   SFILE.seek(EOF);
   SFILE.write(genesis, 113);
   SFILE.close();
