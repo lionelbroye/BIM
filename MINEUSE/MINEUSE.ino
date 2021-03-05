@@ -61,9 +61,8 @@ void printHash(uint8_t* hash) {
   :: index -> hash -> previoushash -> txnumb (max numb for atmega328p needed)-> txs -> timestamp??? -> MinerToken -> HT??? -> Nonce ???
   4     -> 32   -> 32           -> 1                                    -> ?*152 ->  4???       ->  40   ->  ???  -> ???
   */
-  // new stuff : block file are fixed size. there is one blockchain file which can get bigger. But every block are fixed size. Tx limit per block
-  // is 4000 
-  // there is a new file. the "blockpointers" file. every new block, a new uint is written in it. it contains the pointer of the block newly wriiten.
+  // new stuff : blockchain file is unique. Tx limit per block is 4000 
+  // there is a new file: the "blockpointers" file. every new block, a new uint is written in it. it contains the pointer of the block newly wriiten.
     
 #include <SPI.h>
 #include <SD.h>
