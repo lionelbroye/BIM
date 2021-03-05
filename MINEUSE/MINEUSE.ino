@@ -1,4 +1,4 @@
-
+// ok our blockchain can't exceed 4GB because of FAT32 format ok
 /* HERE SOME SPECIFIC FONCTION TO WRITE/READ CREATE FILE ON SD CARD 
 if (SD.exists("filename")) : check if a file exist
 SD.remove("filename") : remove a file
