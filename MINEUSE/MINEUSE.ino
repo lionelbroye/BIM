@@ -1,4 +1,4 @@
-// ok our blockchain can't exceed 4GB because of FAT32 format ok
+// ok our blockchain can't exceed 4GB because of FAT32 format 
 /* HERE SOME SPECIFIC FONCTION TO WRITE/READ CREATE FILE ON SD CARD 
 if (SD.exists("filename")) : check if a file exist
 SD.remove("filename") : remove a file
@@ -58,13 +58,20 @@ void printHash(uint8_t* hash) {
 
       //------------------------------------------------- GENERAL  OBJECT STRUCT -----------------------------------------
   /* block struct : using SHA256 (32o for every hash). using Ed25519 (elliptic curve modulo 2^255 - 19) 32o private. 32o public. 64o sign
-  :: index -> hash -> previoushash -> txnumb (max numb for atmega328p needed)-> txs -> timestamp??? -> MinerToken -> HT??? -> Nonce ???
-  4     -> 32   -> 32           -> 1                                    -> ?*152 ->  4???       ->  40   ->  ???  -> ???
+  :: index -> hash -> previoushash -> txnumb (max numb for atmega328p needed)-> txs -> timestamp??? -> MinerToken ->X HT??? -> Nonce ???
+  4     -> 32   -> 32           -> 4                                    -> ?*152 ->  4???       ->  40   ->  ???  ->X not implemented *2 ???
   */
   // new stuff : block file are fixed size. there is one blockchain file which can get bigger. But every block are fixed size. Tx limit per block
   // is 4000 
   // there is a new file. the "blockpointers" file. every new block, a new uint is written in it. it contains the pointer of the block newly wriiten.
-    
+  // virtualizing utxo for fork check. (fork file have their custom utxo set now it is struct like this : 
+  /*fork chain file :  
+   starting index(uint32) -> number of block(uint32) ->  blockpointers (uint32 * nb) -> blocks .... 
+  */
+  /*BECAUSE TX ARE NOT FIXED SIZE : WE SERIALIZE TX AT THE END OF THE BLOCK !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! */
+     // CAS 1 : 
+    // ONE BLOCK PER TIDE. ONLY ACCEPTING ONE BLOCK PER TIDE. 
+    // WHO IS THE MINER ? we need to define a rare event. we could use signature ( private blockchain ) 
 #include <SPI.h>
 #include <SD.h>
 #include "sha256.h"
@@ -244,7 +251,7 @@ void CreateGenesis(){
   byte genesis[113]; 
   byte uintbuff[4];
   byte byteOffset = 0; 
-  for (i = 0 ; i < 4; i++ ) { genesis[byteOffset] = 0; byteOffset++;}
+  for (i = 0 ; i < 4; i++ ) { genesis[byteOffset] = 0; byteOffset++;} // index
   for (i = 0 ; i < 32; i++ ) { genesis[byteOffset] = (byte)hash[i]; byteOffset++;} // hash
   for (i = 0 ; i < 32; i++ ) { genesis[byteOffset] = (byte)hash[i]; byteOffset++;} // prev hash
   genesis[byteOffset] = 0; byteOffset++; 
@@ -269,7 +276,9 @@ void CreateGenesis(){
   SFILE.write(genesis, 113);
   SFILE.close();
 }
+//------------ GETTING POINTER AND INDEX ::::: WARNING SHOULD ALSO SUPPORT FORKS FILES 
 uint32_t RequestLatestBlockIndex(){
+  
   // latest blockIndex is equal to blockpointers size / 4 
   SFILE = SD.open("blockchain", FILE_WRITE); // genesis file is 113 o
   unsigned long fsize = SFILE.size();
@@ -277,24 +286,104 @@ uint32_t RequestLatestBlockIndex(){
   if ( fsize >  1) fsize --; // give the index starting from 0
   return (uint32_t) fsize;  
 }
-// some verif for blocks ( because we cant load in ram ... ) 
-void GetHashAtBlockIndex(uint32_t index, byte *buff ){ 
+
+void GetBlockPointerInFile(uint32_t index, byte *buff, String FileName, bool official, uint32_t startingindex){
   
-  SFILE = SD.open("blockpointers", FILE_READ); // genesis file is 113 o
-  SFILE.seek(index*4); // go to last 4 bytes... 
-  byte uintbuff[4];
-  SFILE.read(uintbuff,4);
-  SFILE.close();
-  uint32_t bpointer = BytesToUint(uintbuff); 
-    //---------->GO FOR HADH +4 TO +32°
-  SFILE = SD.open("blockchain", FILE_READ);
+  if ( official ) {
+    
+      SFILE = SD.open("blockpointers", FILE_READ); 
+      SFILE.seek(index*4);  
+      SFILE.read(buff,4);
+      SFILE.close();
+  }
+  else{
+    
+    SFILE = SD.open(FileName, FILE_READ); 
+    SFILE.seek(8+(index-startingindex)*4); 
+    SFILE.read(buff,4);
+    SFILE.close();
+  }
+  
+}
+
+void GetStartingIndexOfBlocksFile(byte *buff, String FileName){
+  
+     SFILE = SD.open(FileName, FILE_READ); 
+     SFILE.read(buff,4);
+     SFILE.close();
+}
+void GetBlockLengthOfBlocksFile(byte *buff, String FileName){
+  
+     SFILE = SD.open(FileName, FILE_READ);
+     SFILE.seek(4); 
+     SFILE.read(buff,4);
+     SFILE.close();
+}
+//--------------
+// some verif for blocks ( because we cant load in ram ... ) 
+void GetHashAtBlockPointer( byte *buff, String FileName, uint32_t bpointer ){ 
+ 
+  SFILE = SD.open(FileName, FILE_READ);
   SFILE.seek(bpointer + 4 );
   SFILE.read(buff,32);
   SFILE.close();
+}
+void GetPreviousHashAtBlockPointer( byte *buff, String FileName, uint32_t bpointer ){ 
   
-   
+  SFILE = SD.open("blockchain", FILE_READ);
+  SFILE.seek(bpointer + 36 );
+  SFILE.read(buff,32);
+  SFILE.close();
+}
+void GetNumberOfTXAtBlockPointer( byte *buff, String FileName, uint32_t bpointer ){ 
+  
+  SFILE = SD.open("blockchain", FILE_READ);
+  SFILE.seek(bpointer + 68 );
+  SFILE.read(buff,1);
+  SFILE.close();
+}
+// --------> NEED GET TX -> spkey rpkey sutxop rutxop coin fee token sign
+void GetTXAtBlockPointer( byte *buff, byte txnumb, String FileName, uint32_t bpointer) { // always at the end of the block so txnumb * 144
+
+  
+}
+void GetTimeStampAtBlockPointer( byte *buff, String FileName, uint32_t bpointer ){ 
+ 
+  SFILE = SD.open("blockchain", FILE_READ);
+  SFILE.seek(bpointer + 69 );
+  SFILE.read(buff,4);
+  SFILE.close();
+}
+void GetMinerKeyAtBlockPointer( byte *buff, String FileName, uint32_t bpointer ){ 
+  
+  SFILE = SD.open("blockchain", FILE_READ);
+  SFILE.seek(bpointer + 73 ); 
+  SFILE.read(buff,32);
+  SFILE.close();
+}
+void GetMinerUTXOPAtBlockPointer( byte *buff, String FileName, uint32_t bpointer ){ 
+  
+  SFILE = SD.open("blockchain", FILE_READ);
+  SFILE.seek(bpointer + 105 );
+  SFILE.read(buff,4);
+  SFILE.close();
+}
+void GetMiningRecoltAtBlockPointer( byte *buff, String FileName, uint32_t bpointer ){ 
+  
+  SFILE = SD.open("blockchain", FILE_READ);
+  SFILE.seek(bpointer + 109);
+  SFILE.read(buff,4);
+  SFILE.close();
 }
 
+bool isHashesEqual(byte *a, byte *b){
+  for (byte i = 0 ; i < 32; i++ ) {
+    if ( a[i] != b[i] ){
+      return false;   
+    }
+  }
+  return true;
+}
 uint32_t GetMiningReward(uint32_t Index){
   uint32_t Reward = 50; // NATIVE REWARD
   while (Index >= 210000) // REWARD_DIVIDER_CLOCK
@@ -316,8 +405,12 @@ void Mine(byte *pkey, uint32_t utxop){
   byte uintbuff[4];
   byte i; // iterator
   uint32_t u = RequestLatestBlockIndex();
-  byte hash[32];
-  GetHashAtBlockIndex(u, hash); 
+  // get last block pointer
+  GetBlockPointerInFile(u, uintbuff, "blockchain", true, 0 ); // we dont need to provide startingindex when official
+  uint32_t lastblockPointer = BytesToUint(uintbuff);
+  // get his hash for prev hash 
+  byte hash[32];  
+  GetHashAtBlockPointer( hash, "blockchain",lastblockPointer ); 
   u++; // inc to get new index
   byte byteOffset = 0;
   UINT32toBytes(u, uintbuff );
@@ -346,11 +439,66 @@ void Mine(byte *pkey, uint32_t utxop){
   for (i = 0 ; i < 4; i++ ) { winnerblock[byteOffset] = nextblock[i]; byteOffset++;}
   for (i = 0 ; i < 32; i++ ) { winnerblock[byteOffset] = merkleroot[i]; } // no inc byteoffset here
   for (i = 0 ; i < 77; i++ ) { winnerblock[byteOffset] = nextblock[byteOffset]; byteOffset++;}
-   // append the winner block
+  
+   // append the winner block ( need to update it with ProcessBlock fonction
   SFILE = SD.open("blockchain", FILE_WRITE); 
   SFILE.seek(EOF);
   SFILE.write(winnerblock, 113);
   SFILE.close();
+}
+
+// validation proccess
+void ValidateBlocksFile( String FileName ) {
+  // [1] first verify if block length and starting index. 
+
+  // preparing local variable needed 
+  byte uintbuff[4];
+  byte hashbuffA[32]; // will need to hash buffer for comparing hash
+  byte hashbuffB[32]; 
+  
+  GetStartingIndexOfBlocksFile(uintbuff,FileName);
+  uint32_t startingIndex = BytesToUint(uintbuff);
+  GetBlockLengthOfBlocksFile(uintbuff,FileName);
+  uint32_t blockslength = BytesToUint(uintbuff);
+
+  // [2] verify if block continue the chain and no genesis delivered
+  uint32_t lastOfficialIndex = RequestLatestBlockIndex(); 
+  if ( lastOfficialIndex >= startingIndex + blockslength - 1 || startingIndex == 0 ) return ; 
+
+  // [3] validate the first block of the file
+  // [3a] verify previous hash
+  GetBlockPointerInFile(startingIndex, uintbuff, FileName, false, startingIndex);
+  uint32_t bpointerA = BytesToUint(uintbuff);
+  GetPreviousHashAtBlockPointer( hashbuffA, FileName, bpointerA );
+  GetBlockPointerInFile(startingIndex - 1, uintbuff, "blockchain", true, 0);
+  uint32_t bpointerB = BytesToUint(uintbuff);
+  GetHashAtBlockPointer( hashbuffB, "blockchain", bpointerB );
+  if ( !isHashesEqual(hashbuffB,hashbuffA)) return; 
+  // [3b] verify timestamp 
+  // TODO....
+  // [3c] verify miner utxo pointer
+  // TODO ....
+  // [3d] verify txs
+  // TODO ....
+  // [3e] verify merkle roots
+  
+  // [4] validate the others
+  for (uint32_t i = startingIndex+1; i < startingIndex + blockslength; i++ ) 
+  {
+    // [4a] verify previous hash
+    GetBlockPointerInFile(i, uintbuff, FileName, false, startingIndex);
+    uint32_t bpointerA = BytesToUint(uintbuff);
+    GetPreviousHashAtBlockPointer( hashbuffA, FileName, bpointerA );
+    GetBlockPointerInFile(i - 1, uintbuff, "blockchain", true, 0);
+    uint32_t bpointerB = BytesToUint(uintbuff);
+    GetHashAtBlockPointer( hashbuffB, "blockchain", bpointerB );
+    if ( !isHashesEqual(hashbuffB,hashbuffA)) return; 
+    
+  }
+  // [5] check if fork win. 
+
+  // [6] update files. 
+
 }
 void loop() {
 
