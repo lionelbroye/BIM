@@ -1,4 +1,4 @@
-// ok our blockchain can't exceed 4GB because of FAT32 format 
+// ok our blockchain can't exceed 4GB because of FAT32 format ok
 /* HERE SOME SPECIFIC FONCTION TO WRITE/READ CREATE FILE ON SD CARD 
 if (SD.exists("filename")) : check if a file exist
 SD.remove("filename") : remove a file
@@ -69,6 +69,7 @@ void printHash(uint8_t* hash) {
    starting index(uint32) -> number of block(uint32) ->  blockpointers (uint32 * nb) -> blocks .... 
   */
   /*BECAUSE TX ARE NOT FIXED SIZE : WE SERIALIZE TX AT THE END OF THE BLOCK !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! */
+  // to avoid huge ram usage : we should hash block like this : hash the index. then hash the previous hash with the index hash ... etc. 
      // CAS 1 : 
     // ONE BLOCK PER TIDE. ONLY ACCEPTING ONE BLOCK PER TIDE. 
     // WHO IS THE MINER ? we need to define a rare event. we could use signature ( private blockchain ) 
@@ -335,7 +336,7 @@ void GetPreviousHashAtBlockPointer( byte *buff, String FileName, uint32_t bpoint
   SFILE.read(buff,32);
   SFILE.close();
 }
-void GetNumberOfTXAtBlockPointer( byte *buff, String FileName, uint32_t bpointer ){ 
+void GetNumberOfTXAtBlockPointer( byte *buff, String FileName, uint32_t bpointer ){ // max tx per block
   
   SFILE = SD.open("blockchain", FILE_READ);
   SFILE.seek(bpointer + 68 );
@@ -401,7 +402,7 @@ void Mine(byte *pkey, uint32_t utxop){
   // get prev hash 
   //:: index -> hash -> previoushash -> txnumb (max numb for atmega328p needed)-> txs -> timestamp??? -> MinerToken -> HT??? -> Nonce ???
   // miner token : pkey -> utxop -> mining reward ( dont fuck with tx for the moment ) 
-  byte nextblock[81];
+  byte nextblock[81]; // OK BUT NO... see hashing block routines .... 
   byte uintbuff[4];
   byte i; // iterator
   uint32_t u = RequestLatestBlockIndex();
@@ -448,7 +449,7 @@ void Mine(byte *pkey, uint32_t utxop){
 }
 
 // validation proccess
-void ValidateBlocksFile( String FileName ) {
+bool ValidateBlocksFile( String FileName ) {
   // [1] first verify if block length and starting index. 
 
   // preparing local variable needed 
@@ -463,7 +464,7 @@ void ValidateBlocksFile( String FileName ) {
 
   // [2] verify if block continue the chain and no genesis delivered
   uint32_t lastOfficialIndex = RequestLatestBlockIndex(); 
-  if ( lastOfficialIndex >= startingIndex + blockslength - 1 || startingIndex == 0 ) return ; 
+  if ( lastOfficialIndex >= startingIndex + blockslength - 1 || startingIndex == 0 ) return false; 
 
   // [3] validate the first block of the file
   // [3a] verify previous hash
@@ -473,14 +474,75 @@ void ValidateBlocksFile( String FileName ) {
   GetBlockPointerInFile(startingIndex - 1, uintbuff, "blockchain", true, 0);
   uint32_t bpointerB = BytesToUint(uintbuff);
   GetHashAtBlockPointer( hashbuffB, "blockchain", bpointerB );
-  if ( !isHashesEqual(hashbuffB,hashbuffA)) return; 
+  if ( !isHashesEqual(hashbuffB,hashbuffA)) return false; 
   // [3b] verify timestamp 
   // TODO....
   // [3c] verify miner utxo pointer
   // TODO ....
   // [3d] verify txs
   // TODO ....
-  // [3e] verify merkle roots
+  // [3e] verify merkle roots  
+  byte leaf[64]; 
+  uint8_t *merkleroot;
+
+  // index
+  sha.write(Uint32ToBytes(startingIndex,uintbuff),4);
+  merkleroot = sha.result(); // save it to phash
+
+  // phash
+  for (byte i = 0; i < 32; i++ ) { leaf[i] = merkleroot[i]; } // update leaf side A
+  GetPreviousHashAtBlockPointer( hashbuffA, FileName, bpointerA );
+  for (byte i = 32; i < 64; i++ ) { leaf[i] = hashbuffA[i-32]; } // update leaf side B
+  sha.write(leaf,64);
+  merkleroot = sha.result(); // save it to phash
+
+  // txnumb
+  for (byte i = 0; i < 32; i++ ) { leaf[i] = merkleroot[i]; } // update leaf side A
+  GetNumberOfTXAtBlockPointer( uintbuff, FileName, bpointerA );
+  uint32_t txn = BytesToUint(uintbuff);
+  for (byte i = 32; i < 64; i++ ) { if ( i < 36 ) { leaf[i] = uintbuff[i-32];} else { leaf[i] = 0; } } // update leaf side B ( zeroing the last 28 bytes is needed for better comprehension)
+  sha.write(leaf,64);
+  merkleroot = sha.result(); // save it to phash
+
+  // timestamp
+  for (byte i = 0; i < 32; i++ ) { leaf[i] = merkleroot[i]; } // update leaf side A
+  GetTimeStampAtBlockPointer( uintbuff, FileName, bpointerA );
+  for (byte i = 32; i < 64; i++ ) { if ( i < 36 ) { leaf[i] = uintbuff[i-32];} else { leaf[i] = 0; } } // update leaf side B
+  sha.write(leaf,64);
+  merkleroot = sha.result(); // save it to phash
+
+  // miner key
+  for (byte i = 0; i < 32; i++ ) { leaf[i] = merkleroot[i]; } // update leaf side A
+  GetMinerKeyAtBlockPointer( hashbuffA, FileName, bpointerA );
+  for (byte i = 32; i < 64; i++ ) { leaf[i] = hashbuffA[i-32]; } // update leaf side B
+  sha.write(leaf,64);
+  merkleroot = sha.result(); // save it to phash
+
+  // miner utxo pointer
+  for (byte i = 0; i < 32; i++ ) { leaf[i] = merkleroot[i]; } // update leaf side A
+  GetMinerUTXOPAtBlockPointer( uintbuff, FileName, bpointerA );
+  for (byte i = 32; i < 64; i++ ) { if ( i < 36 ) { leaf[i] = uintbuff[i-32];} else { leaf[i] = 0; } } // update leaf side B
+  sha.write(leaf,64);
+  merkleroot = sha.result(); // save it to phash
+
+  // miner recolt 
+  for (byte i = 0; i < 32; i++ ) { leaf[i] = merkleroot[i]; } // update leaf side A
+  GetMiningRecoltAtBlockPointer( uintbuff, FileName, bpointerA );
+  for (byte i = 32; i < 64; i++ ) { if ( i < 36 ) { leaf[i] = uintbuff[i-32];} else { leaf[i] = 0; } } // update leaf side B
+  sha.write(leaf,64);
+  merkleroot = sha.result(); // save it to phash
+
+  // txs ??
+  for (byte  i = 0 ; i < txn ; i++ ) { } // TODO
+
+  // now verify
+  GetHashAtBlockPointer( hashbuffA, FileName, bpointerA );
+  if ( !isHashesEqual(hashbuffB,merkleroot)) return false; 
+    /* block struct : using SHA256 (32o for every hash). using Ed25519 (elliptic curve modulo 2^255 - 19) 32o private. 32o public. 64o sign
+  :: index -> hash -> previoushash -> txnumb (max numb for atmega328p needed) -> timestamp??? -> MinerToken -> HT??? -> Nonce ???-> txs 
+  4     -> 32   -> 32           -> 1                                    ->  4???       ->  40   ->  ???  -> ??? ->               -> ?*152 
+  */
+  
   
   // [4] validate the others
   for (uint32_t i = startingIndex+1; i < startingIndex + blockslength; i++ ) 
@@ -492,9 +554,12 @@ void ValidateBlocksFile( String FileName ) {
     GetBlockPointerInFile(i - 1, uintbuff, "blockchain", true, 0);
     uint32_t bpointerB = BytesToUint(uintbuff);
     GetHashAtBlockPointer( hashbuffB, "blockchain", bpointerB );
-    if ( !isHashesEqual(hashbuffB,hashbuffA)) return; 
+    if ( !isHashesEqual(hashbuffB,hashbuffA)) return false; 
     
   }
+
+  return true;
+  // does this should be in another function ???
   // [5] check if fork win. 
 
   // [6] update files. 
